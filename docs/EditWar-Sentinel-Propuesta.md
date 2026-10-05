@@ -9,7 +9,7 @@ Propuesta de proyecto final · Octubre de 2026
 | **Alumnos** | Miguel Angel Moreno Martinez<br>Emiliano Franco Gonzalez<br>Francisco Jose Palacios Saad |
 | **Materia** | Infraestructura para el Desarrollo Continuo (O2026_ESI3905O) |
 | **Repositorio** | `github.com/m1ttt/editwar-sentinel` |
-| **Docker Hub** | `hub.docker.com/u/<tu-usuario>` |
+| **Docker Hub** | `hub.docker.com/u/m1ttt` |
 
 ## 1. Descripción del proyecto
 
@@ -386,10 +386,10 @@ Las pruebas corren en cada pull request y bloquean el merge si fallan. No usan r
 
 | Imagen | Contenido |
 |---|---|
-| `<tu-usuario>/editwar-ingestor` | Servicio de ingesta |
-| `<tu-usuario>/editwar-detector` | Motor de detección |
-| `<tu-usuario>/editwar-api` | API REST y WebSocket |
-| `<tu-usuario>/editwar-dashboard` | Dashboard estático servido por nginx |
+| `m1ttt/editwar-ingestor` | Servicio de ingesta |
+| `m1ttt/editwar-detector` | Motor de detección |
+| `m1ttt/editwar-api` | API REST y WebSocket |
+| `m1ttt/editwar-dashboard` | Dashboard estático servido por nginx |
 
 Las imágenes se construyen y publican desde GitHub Actions, nunca a mano.
 
