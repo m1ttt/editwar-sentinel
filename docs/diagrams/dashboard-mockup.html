@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}body{margin:0;width:1600px;height:940px;background:#f3f5f9;font:14px/1.4 Helvetica,Arial,sans-serif;color:#1b2433}
+.top{height:64px;background:#1b2433;color:#fff;display:flex;align-items:center;padding:0 28px;gap:28px}
+.logo{font-weight:700;font-size:20px}.logo span{color:#6aa5ff}
+.live{display:flex;align-items:center;gap:8px;font-size:13px;color:#9fe3b5}.dot{width:10px;height:10px;border-radius:50%;background:#2fd36b}
+.kpi{margin-left:auto;display:flex;gap:34px}.kpi div{text-align:right}.kpi b{display:block;font-size:20px;color:#fff}.kpi small{color:#9aa7bd;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.tag{position:absolute;left:560px;top:20px;background:#fff3cd;color:#7a5b00;border:1px solid #f0d78a;border-radius:4px;padding:3px 10px;font-size:12px}
+.grid{display:grid;grid-template-columns:1.25fr 1fr;grid-template-rows:auto auto;gap:18px;padding:20px 28px}
+.card{background:#fff;border:1px solid #dde1e8;border-radius:8px;overflow:hidden}
+.card h3{margin:0;padding:12px 16px;font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#44546a;border-bottom:1px solid #e6e9ef;display:flex;justify-content:space-between}
+.card h3 em{font-style:normal;color:#1f5fbf;text-transform:none;letter-spacing:0}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;padding:7px 16px;color:#667;font-weight:600;font-size:11px;text-transform:uppercase;background:#f7f8fb}td{padding:7px 16px;border-top:1px solid #eef0f4}
+.pill{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}.hi{background:#fde2e2;color:#a01818}.me{background:#fff0d6;color:#8a5200}.lo{background:#e3f0ff;color:#1f5fbf}
+.ok{background:#e0f6e8;color:#12713a}.off{background:#eceff4;color:#667}.rv{color:#a01818;font-weight:600}.mono{font-family:Menlo,monospace;font-size:12px;color:#44546a}
+.bar{height:8px;background:#e6e9ef;border-radius:4px;width:150px;display:inline-block;vertical-align:middle}.bar i{display:block;height:100%;background:#d9534f;border-radius:4px}
+.btn{border:1px solid #c5ccd8;border-radius:5px;padding:2px 9px;font-size:12px;background:#fff;color:#1b2433}.btn.p{background:#1f5fbf;color:#fff;border-color:#1f5fbf}
+.spark{height:46px;padding:6px 16px}
+</style>
+<div class="top"><div class="logo">EditWar <span>Sentinel</span></div><div class="live"><div class="dot"></div>Conectado · stream en vivo</div>
+<div class="kpi"><div><b>41.7</b><small>ediciones/s</small></div><div><b>3</b><small>pods detector</small></div><div><b>0</b><small>lag Kafka</small></div><div><b>12</b><small>alertas abiertas</small></div></div></div>
+<div class="tag">MAQUETA · datos ilustrativos</div>
+<div class="grid">
+<div class="card"><h3>Flujo en vivo <em>wiki.edits</em></h3>
+<svg class="spark" viewBox="0 0 700 46" width="100%" height="46"><polyline fill="none" stroke="#1f5fbf" stroke-width="2" points="0,30 40,26 80,32 120,22 160,28 200,18 240,24 280,14 320,22 360,30 400,20 440,12 480,24 520,18 560,26 600,16 640,22 700,10"/></svg>
+<table><tr><th>Hora</th><th>Wiki</th><th>Artículo</th><th>Usuario</th><th>Δ bytes</th><th></th></tr>
+<tr><td class="mono">21:04:12</td><td>enwiki</td><td>Apache Kafka</td><td>Editor_A</td><td>+212</td><td></td></tr>
+<tr><td class="mono">21:04:11</td><td>eswiki</td><td>Kubernetes</td><td>Editor_B</td><td class="rv">−1,840</td><td><span class="pill hi">revert</span></td></tr>
+<tr><td class="mono">21:04:11</td><td>enwiki</td><td>Docker (software)</td><td>ExampleBot</td><td>+4</td><td><span class="pill lo">bot</span></td></tr>
+<tr><td class="mono">21:04:10</td><td>enwiki</td><td>Kubernetes</td><td>Editor_C</td><td>+1,832</td><td></td></tr>
+<tr><td class="mono">21:04:09</td><td>dewiki</td><td>Apache Kafka</td><td>Editor_D</td><td>−35</td><td></td></tr>
+<tr><td class="mono">21:04:09</td><td>enwiki</td><td>Kubernetes</td><td>Editor_B</td><td class="rv">−1,832</td><td><span class="pill hi">revert</span></td></tr>
+<tr><td class="mono">21:04:08</td><td>frwiki</td><td>Conteneur (informatique)</td><td>Editor_E</td><td>+97</td><td></td></tr>
+<tr><td class="mono">21:04:07</td><td>enwiki</td><td>Linux kernel</td><td>ExampleBot</td><td>+2</td><td><span class="pill lo">bot</span></td></tr></table></div>
+<div class="card"><h3>Artículos más disputados <em>última hora</em></h3>
+<table><tr><th>#</th><th>Artículo</th><th>Reversiones</th><th>Editores</th></tr>
+<tr><td>1</td><td>Kubernetes <span class="mono">enwiki</span></td><td><span class="bar"><i style="width:100%"></i></span> 14</td><td>3</td></tr>
+<tr><td>2</td><td>Apache Kafka <span class="mono">enwiki</span></td><td><span class="bar"><i style="width:64%"></i></span> 9</td><td>2</td></tr>
+<tr><td>3</td><td>Docker (software) <span class="mono">enwiki</span></td><td><span class="bar"><i style="width:43%"></i></span> 6</td><td>2</td></tr>
+<tr><td>4</td><td>Contenedor <span class="mono">eswiki</span></td><td><span class="bar"><i style="width:29%"></i></span> 4</td><td>2</td></tr>
+<tr><td>5</td><td>Linux kernel <span class="mono">enwiki</span></td><td><span class="bar"><i style="width:21%"></i></span> 3</td><td>2</td></tr></table></div>
+<div class="card"><h3>Alertas <em>12 abiertas</em></h3>
+<table><tr><th>Hora</th><th>Tipo</th><th>Severidad</th><th>Artículo</th><th>Estado</th><th></th></tr>
+<tr><td class="mono">21:03:58</td><td>revert_war</td><td><span class="pill hi">alta</span></td><td>Kubernetes</td><td>open</td><td><span class="btn p">Reconocer</span> <span class="btn">Descartar</span></td></tr>
+<tr><td class="mono">21:01:40</td><td>burst</td><td><span class="pill me">media</span></td><td>Apache Kafka</td><td>open</td><td><span class="btn p">Reconocer</span> <span class="btn">Descartar</span></td></tr>
+<tr><td class="mono">20:57:15</td><td>bot_spike</td><td><span class="pill lo">baja</span></td><td>Linux kernel</td><td>acknowledged</td><td><span class="btn">Descartar</span></td></tr>
+<tr><td class="mono">20:52:03</td><td>revert_war</td><td><span class="pill hi">alta</span></td><td>Docker (software)</td><td>open</td><td><span class="btn p">Reconocer</span> <span class="btn">Descartar</span></td></tr>
+<tr><td class="mono">20:48:31</td><td>burst</td><td><span class="pill me">media</span></td><td>Contenedor</td><td>dismissed</td><td></td></tr></table></div>
+<div class="card"><h3>Reglas de detección <em>+ Nueva regla</em></h3>
+<table><tr><th>Nombre</th><th>Tipo</th><th>Ventana</th><th>Umbral</th><th>Estado</th><th></th></tr>
+<tr><td>Guerra de edición</td><td>revert_war</td><td>600 s</td><td>4 (≥2 usuarios)</td><td><span class="pill ok">activa</span></td><td><span class="btn">Editar</span> <span class="btn">Eliminar</span></td></tr>
+<tr><td>Ráfaga de ediciones</td><td>burst</td><td>60 s</td><td>20</td><td><span class="pill ok">activa</span></td><td><span class="btn">Editar</span> <span class="btn">Eliminar</span></td></tr>
+<tr><td>Pico de bots</td><td>bot_spike</td><td>300 s</td><td>15</td><td><span class="pill off">pausada</span></td><td><span class="btn">Editar</span> <span class="btn">Eliminar</span></td></tr></table></div>
+</div>

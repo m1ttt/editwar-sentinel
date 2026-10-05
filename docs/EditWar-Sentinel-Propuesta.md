@@ -70,6 +70,17 @@ Los tres diagramas siguientes detallan las clases y los métodos de cada servici
 
 ![Diagrama de clases: API, alertas y reglas](https://raw.githubusercontent.com/m1ttt/editwar-sentinel/main/docs/images/clases-api.png)
 
+### 2.6 Maqueta del dashboard
+
+![Maqueta del dashboard de EditWar Sentinel](https://raw.githubusercontent.com/m1ttt/editwar-sentinel/main/docs/images/dashboard-mockup.png)
+
+La imagen es una maqueta con datos ilustrativos. El dashboard real mostrará ediciones reales del stream. Tiene cuatro paneles:
+
+- **Flujo en vivo:** ediciones recibidas por `WS /ws/live` y gráfica de rendimiento.
+- **Artículos más disputados:** ranking de reversiones de la última hora, calculado por `StatsService`.
+- **Alertas:** lista de alertas con las acciones reconocer y descartar (`PATCH /api/alerts/{id}`).
+- **Reglas de detección:** alta, edición y baja de reglas (`/api/rules`).
+
 ## 3. Stack tecnológico
 
 | Capa | Tecnología | Uso en el proyecto |
