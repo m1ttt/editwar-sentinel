@@ -1,0 +1,70 @@
+classDiagram
+direction TB
+class EditEvent {
+  +str event_id
+  +str wiki
+  +str title
+  +str user
+  +bool is_bot
+  +datetime timestamp
+  +str comment
+  +int old_len
+  +int new_len
+  +size_delta() int
+  +partition_key() str
+  +to_json() str
+  +from_json(raw)$ EditEvent
+}
+class EventSource {
+  <<abstract>>
+  +connect()
+  +events() AsyncIterator~dict~
+  +close()
+}
+class WikimediaSSESource {
+  -str url
+  -str last_event_id
+  +connect()
+  +events() AsyncIterator~dict~
+  +reconnect()
+  +close()
+}
+class ReplayFileSource {
+  -Path path
+  -float speed
+  +connect()
+  +events() AsyncIterator~dict~
+  +close()
+}
+class EventNormalizer {
+  +parse(raw) EditEvent
+}
+class EventFilter {
+  -set namespaces
+  -set types
+  +accept(event) bool
+}
+class EventPublisher {
+  <<abstract>>
+  +publish(event)
+  +flush()
+}
+class KafkaEventPublisher {
+  -str topic
+  +publish(event)
+  +flush()
+}
+class IngestorService {
+  +run()
+  +stop()
+  +stats() dict
+}
+EventSource <|-- WikimediaSSESource
+EventSource <|-- ReplayFileSource
+EventPublisher <|-- KafkaEventPublisher
+IngestorService o-- EventSource
+IngestorService --> EventNormalizer
+IngestorService --> EventFilter
+IngestorService o-- EventPublisher
+EventNormalizer ..> EditEvent : crea
+EventFilter ..> EditEvent : evalúa

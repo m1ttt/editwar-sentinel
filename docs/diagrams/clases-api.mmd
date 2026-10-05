@@ -1,0 +1,81 @@
+classDiagram
+direction LR
+class Alert {
+  +UUID id
+  +UUID rule_id
+  +str kind
+  +str severity
+  +str wiki
+  +str title
+  +dict evidence
+  +str status
+  +datetime created_at
+  +acknowledge(user)
+  +dismiss()
+  +page_url() str
+  +to_json() str
+}
+class DetectionRule {
+  +UUID id
+  +str name
+  +str kind
+  +int window_seconds
+  +int threshold
+  +int min_users
+  +bool enabled
+  +validate()
+  +enable()
+  +disable()
+}
+class AlertRepository {
+  +create(alert) Alert
+  +get(id) Alert
+  +list(filters) list~Alert~
+  +update_status(id, status) Alert
+  +delete(id)
+  +purge_older_than(days) int
+}
+class RuleRepository {
+  +create(rule) DetectionRule
+  +get(id) DetectionRule
+  +list() list~DetectionRule~
+  +update(id, data) DetectionRule
+  +delete(id)
+}
+class AlertController {
+  +list_alerts(filters)
+  +get_alert(id)
+  +update_alert(id, status)
+  +delete_alert(id)
+}
+class RuleController {
+  +create_rule(data)
+  +list_rules()
+  +get_rule(id)
+  +update_rule(id, data)
+  +delete_rule(id)
+}
+class AlertConsumer {
+  +run()
+  +handle(message)
+}
+class StatsService {
+  +record_edit(event)
+  +record_revert(event)
+  +throughput() float
+  +top_disputed(n) list
+  +snapshot() dict
+}
+class WebSocketHub {
+  +connect(ws)
+  +disconnect(ws)
+  +broadcast(message)
+}
+AlertController --> AlertRepository
+RuleController --> RuleRepository
+AlertConsumer --> AlertRepository
+AlertConsumer --> WebSocketHub
+StatsService --> WebSocketHub
+AlertRepository ..> Alert
+RuleRepository ..> DetectionRule
+Alert --> DetectionRule : generada por
