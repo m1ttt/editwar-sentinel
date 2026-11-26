@@ -53,6 +53,9 @@ spec:
           env:
             # All replicas share the group "api-alerts", so each alert is stored once.
             # The live feed consumer has no group, so every replica sees every message.
+            # Kubernetes probes are not traced (they would be most of the requests).
+            - name: OTEL_PYTHON_FASTAPI_EXCLUDED_URLS
+              value: "healthz,readyz"
             - name: KAFKA_GROUP_ID
               value: api
             - name: DATABASE_URL
