@@ -147,7 +147,7 @@ Haz estos pasos una vez, en Settings del repositorio.
 La identidad que crea Terraform solo tiene el rol AKS Cluster User y solo confía en los environments `dev` y `prod`. No puede ejecutar `plan` ni `apply`. Crea una vez, a mano, una segunda identidad con:
 
 - Credenciales federadas para `repo:m1ttt/editwar-sentinel:environment:infra-plan` y `repo:m1ttt/editwar-sentinel:environment:infra-approval`.
-- Rol Contributor y Role Based Access Control Administrator (o User Access Administrator) en la suscripción, porque Terraform crea asignaciones de roles.
+- Rol Contributor y Role Based Access Control Administrator (o User Access Administrator) en la suscripción, porque Terraform crea asignaciones de roles. Por defecto las anotaciones de release usan el rol integrado Application Insights Component Contributor, asignado solo en los dos componentes. Para el rol personalizado de mínimo privilegio (`github_annotations_role = "custom"`) hace falta User Access Administrator, porque Role Based Access Control Administrator no puede crear definiciones de rol.
 - Rol Storage Blob Data Contributor en el contenedor del estado.
 
 Guarda su Client ID en `INFRA_AZURE_CLIENT_ID`.

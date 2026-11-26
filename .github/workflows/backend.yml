@@ -241,6 +241,17 @@ jobs:
           done
           echo "::error::http://$HOST/api/version does not report $TAG"
           exit 1
+      # Marks the deploy on the Application Insights charts. Runs only after the
+      # smoke test passed, and never fails the job (it only logs a warning).
+      - name: Release annotation in Application Insights
+        continue-on-error: true
+        uses: ./.github/actions/app-insights-annotation
+        with:
+          pipeline: backend
+          environment: dev
+          version: ${{ env.TAG }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
 
   deploy-prod:
     name: Deploy prod
@@ -315,3 +326,12 @@ jobs:
           done
           echo "::error::http://$HOST/api/version does not report $TAG"
           exit 1
+      - name: Release annotation in Application Insights
+        continue-on-error: true
+        uses: ./.github/actions/app-insights-annotation
+        with:
+          pipeline: backend
+          environment: prod
+          version: ${{ env.TAG }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
