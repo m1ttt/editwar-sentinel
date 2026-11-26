@@ -69,13 +69,13 @@ variable "kubernetes_version" {
 variable "node_vm_size" {
   description = "VM size of the AKS system node pool. A system pool needs at least 2 vCPU and 4 GiB of memory."
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2as_v6"
 }
 
 variable "node_count" {
   description = "Number of nodes in the AKS system node pool."
   type        = number
-  default     = 2
+  default     = 1
 
   validation {
     condition     = var.node_count >= 1 && var.node_count <= 5

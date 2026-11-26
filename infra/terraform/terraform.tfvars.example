@@ -6,8 +6,8 @@ tenant_id       = "00000000-0000-0000-0000-000000000000"
 
 # Optional overrides (defaults shown).
 # location           = "eastus2"
-# node_vm_size       = "Standard_B2s"
-# node_count         = 2
+# node_vm_size       = "Standard_D2as_v6"
+# node_count         = 1
 # kubernetes_version = null
 # log_daily_quota_gb = -1
 # alert_email        = ""

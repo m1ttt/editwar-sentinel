@@ -81,7 +81,7 @@ Diagramas de clases: [ingesta](https://github.com/m1ttt/editwar-sentinel/blob/ma
 | Recurso | Propósito |
 |---|---|
 | Resource group | Agrupa todos los recursos del proyecto |
-| AKS (2 nodos `Standard_B2s`) | Corre los namespaces `editwar-dev` y `editwar-prod` con KEDA y Container Insights |
+| AKS (1 nodo `Standard_D2as_v6`, 2 vCPU y 8 GB) | Corre los namespaces `editwar-dev` y `editwar-prod` con KEDA y Container Insights |
 | IP pública estática e ingress-nginx | URL pública: `editwar.<ip>.nip.io` (prod) y `editwar-dev.<ip>.nip.io` (dev) |
 | Log Analytics workspace | Logs y métricas de contenedores (CPU, memoria) |
 | Application Insights (uno por ambiente) | Trazas, errores, requests y mensajes de log |
