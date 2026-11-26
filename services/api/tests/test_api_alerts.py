@@ -42,6 +42,7 @@ async def test_list_alerts_newest_first(client: httpx.AsyncClient) -> None:
     assert [item["id"] for item in body] == [str(a.id) for a in reversed(alerts)]
     assert body[0] == alerts[-1].to_dict()
     assert body[0]["page_url"] == "https://en.wikipedia.org/wiki/Python_(programming_language)"
+    assert body[0]["history_url"].endswith("title=Python_(programming_language)&action=history")
 
 
 async def test_list_alerts_empty(client: httpx.AsyncClient) -> None:

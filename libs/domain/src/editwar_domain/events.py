@@ -6,10 +6,17 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 
 def _parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value).astimezone(UTC)
+
+
+def history_url(server_url: str, title: str) -> str:
+    """URL of the revision history of an article ("action=history")."""
+    page = quote(title.replace(" ", "_"), safe=":/(),")
+    return f"{server_url}/w/index.php?title={page}&action=history"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +51,9 @@ class EditEvent:
     def diff_url(self) -> str:
         return f"{self.server_url}/w/index.php?diff={self.rev_id}&oldid={self.old_rev_id}"
 
+    def history_url(self) -> str:
+        return history_url(self.server_url, self.title)
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["timestamp"] = self.timestamp.isoformat()
@@ -74,6 +84,9 @@ class RevertEvent:
     timestamp: datetime
     reason: str  # "comment" or "size_restore"
     server_url: str
+    # Author of the edit that was undone, when the classifier can tell.
+    # Optional, so messages written before this field existed still parse.
+    reverted_user: str | None = None
 
     def partition_key(self) -> str:
         return f"{self.wiki}:{self.title}"

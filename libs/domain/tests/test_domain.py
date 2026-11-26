@@ -48,6 +48,16 @@ def test_edit_event_helpers() -> None:
     assert event.partition_key() == "enwiki:Python (programming language)"
     assert event.page_url() == "https://en.wikipedia.org/wiki/Python_(programming_language)"
     assert event.diff_url().endswith("diff=2&oldid=1")
+    assert event.history_url() == (
+        "https://en.wikipedia.org/w/index.php?title=Python_(programming_language)&action=history"
+    )
+
+
+def test_history_url_quotes_the_title() -> None:
+    event = make_event(title="AT&T + Café?", server_url="https://es.wikipedia.org")
+    assert event.history_url() == (
+        "https://es.wikipedia.org/w/index.php?title=AT%26T_%2B_Caf%C3%A9%3F&action=history"
+    )
 
 
 def test_revert_event_round_trip() -> None:
@@ -62,6 +72,33 @@ def test_revert_event_round_trip() -> None:
     )
     assert RevertEvent.from_json(revert.to_json()) == revert
     assert revert.partition_key() == "enwiki:X"
+    assert revert.reverted_user is None
+    assert revert.to_dict()["reverted_user"] is None
+
+
+def test_revert_event_reverted_user() -> None:
+    revert = RevertEvent(
+        event_id="e3",
+        wiki="enwiki",
+        title="X",
+        user="Bob",
+        timestamp=datetime(2026, 11, 1, tzinfo=UTC),
+        reason="size_restore",
+        server_url="https://en.wikipedia.org",
+        reverted_user="Alice",
+    )
+    data = revert.to_dict()
+    assert data["reverted_user"] == "Alice"
+    assert RevertEvent.from_dict(data) == revert
+
+
+def test_revert_event_reads_old_json_without_reverted_user() -> None:
+    old = (
+        '{"event_id": "e4", "wiki": "enwiki", "title": "X", "user": "Bob",'
+        ' "timestamp": "2026-11-01T00:00:00+00:00", "reason": "comment",'
+        ' "server_url": "https://en.wikipedia.org"}'
+    )
+    assert RevertEvent.from_json(old).reverted_user is None
 
 
 def test_rule_round_trip_and_toggle() -> None:
@@ -101,6 +138,11 @@ def test_alert_lifecycle_and_json() -> None:
         evidence={"reverts": 3},
     )
     assert alert.page_url() == "https://en.wikipedia.org/wiki/Some_page"
+    history = "https://en.wikipedia.org/w/index.php?title=Some_page&action=history"
+    assert alert.history_url() == history
+    data = alert.to_dict()
+    assert data["history_url"] == history
+    assert Alert.from_dict(data).id == alert.id  # derived keys are ignored
     alert.acknowledge("mike")
     assert alert.status is AlertStatus.ACKNOWLEDGED and alert.acknowledged_by == "mike"
     alert.dismiss()
@@ -119,6 +161,8 @@ def test_wiki_wide_alert_url() -> None:
         evidence={},
     )
     assert alert.page_url().endswith("Special:RecentChanges")
+    assert alert.history_url() is None
+    assert alert.to_dict()["history_url"] is None
 
 
 def test_env_helpers(monkeypatch: pytest.MonkeyPatch) -> None:

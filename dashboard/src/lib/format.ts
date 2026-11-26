@@ -38,10 +38,14 @@ export const SEVERITY_LABELS: Record<Severity, string> = {
 }
 
 // The evidence keys are not fixed, so show numbers and strings as they are,
-// short string lists joined, and longer lists as a count.
+// short string lists joined, and longer lists as a count. The timeline is left out.
 export function summarizeEvidence(evidence: Record<string, unknown> | null | undefined): string {
   const parts: string[] = []
   for (const [key, value] of Object.entries(evidence ?? {})) {
+    // The edit war timeline has its own view (EditWarTimeline).
+    if (key === 'timeline' || key === 'timeline_truncated') {
+      continue
+    }
     if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
       parts.push(`${key}: ${value}`)
     } else if (Array.isArray(value)) {

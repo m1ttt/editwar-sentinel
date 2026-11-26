@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { acknowledgeAlert, deleteAlert, dismissAlert, errorMessage, listAlerts } from '../api/client'
 import { severityCounts } from '../lib/derive'
 import { alertTitle, formatTime, SEVERITY_LABELS, summarizeEvidence } from '../lib/format'
+import { resolveHistoryUrl, timelineOf } from '../lib/wiki'
 import type { Alert, AlertStatus, Severity } from '../types'
+import { EditWarTimeline } from './EditWarTimeline'
 import { Panel } from './Panel'
 
 interface AlertsPanelProps {
@@ -38,7 +40,11 @@ function SeverityBreakdown({ alerts }: { alerts: Alert[] }) {
     <div className="severity">
       <span className="severity-bar" aria-hidden="true">
         {SEVERITY_ORDER.map((severity) => (
-          <i key={severity} className={SEVERITY_CLASSES[severity]} style={{ width: `${(counts[severity] / total) * 100}%` }} />
+          <i
+            key={severity}
+            className={SEVERITY_CLASSES[severity]}
+            style={{ width: `${(counts[severity] / total) * 100}%` }}
+          />
         ))}
       </span>
       <ul className="severity-legend" aria-label={`Severidad de las ${alerts.length} alertas cargadas`}>
@@ -61,6 +67,16 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
   const [error, setError] = useState<string | null>(null)
   // Incremented after each action to load the list again.
   const [reloadKey, setReloadKey] = useState(0)
+  // Ids of the alerts whose edit war timeline is open.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+
+  const toggleTimeline = (id: string) =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const lastAlertId = lastAlert?.id
   useEffect(() => {
@@ -148,64 +164,106 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
                 </td>
               </tr>
             )}
-            {alerts.map((alert) => (
-              <tr
-                key={alert.id}
-                className={[
-                  `sev-row-${SEVERITY_CLASSES[alert.severity] ?? 'lo'}`,
-                  `status-${alert.status}`,
-                  alert.id === lastAlertId ? 'row-new' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                <td className="mono">{formatTime(alert.created_at)}</td>
-                <td>
-                  <span className={`pill ${SEVERITY_CLASSES[alert.severity] ?? 'lo'}`}>
-                    {SEVERITY_LABELS[alert.severity] ?? alert.severity}
-                  </span>
-                </td>
-                <td className="incident">
-                  <a href={alert.page_url} target="_blank" rel="noreferrer">
-                    {alertTitle(alert.title, alert.wiki)}
-                  </a>
-                  <span className="incident-line">
-                    <span className="incident-meta">
-                      <span className="mono">
-                        {alert.kind} · {alert.wiki}
+            {alerts.map((alert) => {
+              const timeline = timelineOf(alert.evidence)
+              const history = resolveHistoryUrl(alert)
+              const isOpen = timeline !== null && expanded.has(alert.id)
+              const timelineId = `timeline-${alert.id}`
+              return (
+                <Fragment key={alert.id}>
+                  <tr
+                    className={[
+                      `sev-row-${SEVERITY_CLASSES[alert.severity] ?? 'lo'}`,
+                      `status-${alert.status}`,
+                      alert.id === lastAlertId ? 'row-new' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
+                    <td className="mono">{formatTime(alert.created_at)}</td>
+                    <td>
+                      <span className={`pill ${SEVERITY_CLASSES[alert.severity] ?? 'lo'}`}>
+                        {SEVERITY_LABELS[alert.severity] ?? alert.severity}
                       </span>
-                      <span className="status">
-                        <span className={`status-dot status-dot-${alert.status}`} aria-hidden="true" />
-                        {STATUS_LABELS[alert.status] ?? alert.status}
-                        {alert.acknowledged_by && <span className="muted"> ({alert.acknowledged_by})</span>}
+                    </td>
+                    <td className="incident">
+                      <a href={alert.page_url} target="_blank" rel="noreferrer">
+                        {alertTitle(alert.title, alert.wiki)}
+                      </a>
+                      <span className="incident-line">
+                        <span className="incident-meta">
+                          <span className="mono">
+                            {alert.kind} · {alert.wiki}
+                          </span>
+                          <span className="status">
+                            <span className={`status-dot status-dot-${alert.status}`} aria-hidden="true" />
+                            {STATUS_LABELS[alert.status] ?? alert.status}
+                            {alert.acknowledged_by && <span className="muted"> ({alert.acknowledged_by})</span>}
+                          </span>
+                        </span>
+                        <span className="evidence" title={JSON.stringify(alert.evidence)}>
+                          {summarizeEvidence(alert.evidence)}
+                        </span>
                       </span>
-                    </span>
-                    <span className="evidence" title={JSON.stringify(alert.evidence)}>
-                      {summarizeEvidence(alert.evidence)}
-                    </span>
-                  </span>
-                </td>
-                <td className="actions">
-                  {alert.status === 'open' && (
-                    <button
-                      className="btn primary"
-                      disabled={operatorName === ''}
-                      onClick={() => void run(() => acknowledgeAlert(alert.id, operatorName))}
-                    >
-                      Reconocer
-                    </button>
+                      {(history || timeline) && (
+                        <span className="incident-links">
+                          {timeline && (
+                            <button
+                              type="button"
+                              className="btn ghost ew-toggle"
+                              aria-expanded={isOpen}
+                              aria-controls={isOpen ? timelineId : undefined}
+                              onClick={() => toggleTimeline(alert.id)}
+                            >
+                              <span aria-hidden="true">{isOpen ? '▾ ' : '▸ '}</span>
+                              {`Ver pelea (${timeline.length} ${timeline.length === 1 ? 'edición' : 'ediciones'})`}
+                            </button>
+                          )}
+                          {history && (
+                            <a className="ext-link" href={history} target="_blank" rel="noreferrer">
+                              historial ↗
+                            </a>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td className="actions">
+                      {alert.status === 'open' && (
+                        <button
+                          className="btn primary"
+                          disabled={operatorName === ''}
+                          onClick={() => void run(() => acknowledgeAlert(alert.id, operatorName))}
+                        >
+                          Reconocer
+                        </button>
+                      )}
+                      {alert.status !== 'dismissed' && (
+                        <button className="btn" onClick={() => void run(() => dismissAlert(alert.id))}>
+                          Descartar
+                        </button>
+                      )}
+                      <button className="btn danger" onClick={() => remove(alert)}>
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="ew-row">
+                      <td colSpan={4} id={timelineId}>
+                        {/* Pinned to the visible width of the scrolling table, see .ew-pin. */}
+                        <div className="ew-pin">
+                          <EditWarTimeline
+                            timeline={timeline}
+                            serverUrl={alert.server_url}
+                            truncated={alert.evidence?.timeline_truncated === true}
+                          />
+                        </div>
+                      </td>
+                    </tr>
                   )}
-                  {alert.status !== 'dismissed' && (
-                    <button className="btn" onClick={() => void run(() => dismissAlert(alert.id))}>
-                      Descartar
-                    </button>
-                  )}
-                  <button className="btn danger" onClick={() => remove(alert)}>
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
