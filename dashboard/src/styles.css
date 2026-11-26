@@ -655,6 +655,8 @@ a:hover {
 
 .table-wrap {
   overflow-x: auto;
+  /* Size container: .ew-pin uses 100cqi to match the visible width. */
+  container-type: inline-size;
 }
 
 table {
@@ -1563,6 +1565,287 @@ tbody tr:hover td {
 .t-user::before {
   content: '@';
   color: var(--line-strong);
+}
+
+/* ---- Wikipedia links (diff, historial) ---- */
+
+.ext-link {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.t-body .t-diff {
+  flex: none;
+  overflow: visible;
+  color: var(--accent-strong);
+}
+
+.ranking-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.incident-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 3px;
+}
+
+.incident .incident-links a {
+  display: inline;
+  font-weight: 400;
+}
+
+.ew-toggle {
+  white-space: nowrap;
+}
+
+/* ---- Edit war timeline (inside the incidents table) ---- */
+
+.incidents .ew-row td,
+.incidents .ew-row td:first-child {
+  padding: 0;
+  background: var(--panel-raised);
+}
+
+/* The incidents table scrolls sideways when it is wider than the panel.
+   The timeline stays at the left edge and as wide as the visible area, so it
+   is never cut off and never makes the table wider. */
+.ew-pin {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 100cqi;
+  padding: 0 10px 10px 18px;
+  box-shadow: inset 2px 0 0 var(--accent-line);
+}
+
+.incidents tbody .ew-row:hover td {
+  background: var(--panel-raised);
+}
+
+.ew {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  min-width: 0;
+}
+
+.ew-participants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ew-participants li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+}
+
+.ew-counts {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.ew-user {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ew-marker {
+  display: inline-block;
+  width: 1.2em;
+  font-size: 10px;
+  text-align: center;
+}
+
+.ew-note {
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px dashed var(--medium);
+  background: var(--medium-soft);
+  color: var(--medium);
+}
+
+.ew-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--line-strong);
+}
+
+.ew-entry {
+  position: relative;
+  padding: 5px 0 5px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* A dot on the time axis. Reverts get the high severity color. */
+.ew-entry::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 10px;
+  width: 7px;
+  height: 7px;
+  background: var(--line-strong);
+}
+
+.ew-entry.is-revert {
+  background: rgba(255, 77, 94, 0.06);
+}
+
+.ew-entry.is-revert::before {
+  background: var(--high);
+  box-shadow: 0 0 6px var(--high);
+}
+
+.ew-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ew-time {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.ew-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ew-tags .pill,
+.ew-participants .pill {
+  padding: 0 4px;
+  font-size: 9.5px;
+  text-transform: none;
+}
+
+.ew-delta {
+  margin-left: auto;
+}
+
+.ew-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+}
+
+.ew-comment {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.ew-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.ew-diff {
+  margin-top: 6px;
+}
+
+/* ---- Diff view ---- */
+
+.diff-view {
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+}
+
+.diff-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-head);
+}
+
+.diff-head .ext-link {
+  margin-left: auto;
+}
+
+.diff-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: var(--panel);
+}
+
+.diff-status {
+  margin: 0;
+  padding: 10px 8px;
+  color: var(--text-faint);
+}
+
+.diff-note {
+  color: var(--text-dim);
+}
+
+.diff-view .diff-error {
+  margin: 8px;
+}
+
+.diff-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 8px;
+}
+
+.diff-actions:empty {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .ew-pin {
+    padding: 0 6px 8px 8px;
+  }
+
+  .ew-line {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .ew-comment {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  .ew-actions {
+    margin-left: auto;
+  }
 }
 
 /* ---- Forms ---- */

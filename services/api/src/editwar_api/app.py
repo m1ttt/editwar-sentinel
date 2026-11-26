@@ -36,6 +36,7 @@ from editwar_api.config import Settings
 from editwar_api.consumers import AlertConsumer, LiveConsumer
 from editwar_api.controllers import AlertController, RuleController
 from editwar_api.db import make_engine, make_sessions, run_migrations
+from editwar_api.diffs import DiffService, diff_router
 from editwar_api.geo import GeoService
 from editwar_api.repositories import AlertRepository, RuleRepository
 from editwar_api.stats import StatsService
@@ -185,6 +186,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     alert_consumer = AlertConsumer(alerts, hub)
     geo = GeoService(max_points=settings.geo_max_points) if settings.geo_enabled else None
     live_consumer = LiveConsumer(stats, hub, geo)
+    diffs = DiffService()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -208,6 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await live_consumer.drain()
         if geo is not None:
             await geo.close()
+        await app.state.diffs.close()  # tests may swap the service
         await engine.dispose()
 
     app = FastAPI(title="EditWar Sentinel API", version=settings.service_version, lifespan=lifespan)
@@ -228,9 +231,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.alert_consumer = alert_consumer
     app.state.live_consumer = live_consumer
     app.state.geo = geo
+    app.state.diffs = diffs
 
     app.include_router(system_router(settings))
     app.include_router(geo_router())
+    app.include_router(diff_router())
     app.include_router(RuleController(rules).router)
     app.include_router(AlertController(alerts).router)
     if settings.enable_debug_endpoints:

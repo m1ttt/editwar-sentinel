@@ -52,6 +52,7 @@ def test_top_disputed_ranks_articles_by_reverts() -> None:
         "title": "Lima",
         "reverts": 1,
         "page_url": "https://es.w.org/wiki/Lima",
+        "history_url": "https://es.w.org/w/index.php?title=Lima&action=history",
     }
     assert len(stats.top_disputed(2)) == 2
     assert stats.total_reverts == 6

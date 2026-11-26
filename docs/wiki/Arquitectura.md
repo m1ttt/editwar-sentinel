@@ -54,6 +54,7 @@ Diagramas de clases: [ingesta](https://github.com/m1ttt/editwar-sentinel/blob/ma
 | `GET /api/stats` | Ediciones por segundo, totales y artículos más disputados |
 | `GET /api/version` | Versión (`sha-<commit>`) y ambiente desplegados |
 | `GET /api/geo/recent` | Últimas reversiones y alertas en artículos con coordenadas, para el mapa |
+| `GET /api/diff?server_url=&rev_id=&old_rev_id=` | Diff de una revisión (filas HTML de MediaWiki `action=compare`) para la línea de tiempo de una guerra de ediciones. Solo hosts de Wikimedia; caché LRU en memoria |
 | `WS /ws/live` | Mensajes `edit`, `revert`, `alert`, `stats` y `geo` |
 | `GET /healthz`, `GET /readyz` | Probes de Kubernetes |
 | `GET /api/debug/error`, `GET /api/debug/log` | Demo de APM. Activos solo con `ENABLE_DEBUG_ENDPOINTS=true` (local y dev) |

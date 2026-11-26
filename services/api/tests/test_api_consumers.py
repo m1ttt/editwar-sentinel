@@ -74,7 +74,8 @@ async def test_live_consumer_records_and_broadcasts() -> None:
     consumer = LiveConsumer(stats, hub)
 
     await consumer.handle(FakeMessage(TOPIC_EDITS, make_edit().to_json().encode()))
-    await consumer.handle(FakeMessage(TOPIC_REVERTS, make_revert_event().to_json().encode()))
+    revert_event = make_revert_event(reverted_user="Alice")
+    await consumer.handle(FakeMessage(TOPIC_REVERTS, revert_event.to_json().encode()))
     await consumer.handle(FakeMessage(TOPIC_EDITS, None))
     await consumer.handle(FakeMessage("other.topic", b"{}"))
 
@@ -86,6 +87,12 @@ async def test_live_consumer_records_and_broadcasts() -> None:
     assert revert["type"] == "revert"
     assert revert["data"]["user"] == "Bob"
     assert revert["data"]["page_url"].endswith("/wiki/Python_(programming_language)")
+    history = (
+        "https://en.wikipedia.org/w/index.php?title=Python_(programming_language)&action=history"
+    )
+    assert edit["data"]["history_url"] == history
+    assert revert["data"]["history_url"] == history
+    assert revert["data"]["reverted_user"] == "Alice"
 
 
 async def test_run_consumer_retries_and_skips_bad_messages(

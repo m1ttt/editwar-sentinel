@@ -12,6 +12,8 @@ export interface DisputedArticle {
   title: string
   reverts: number
   page_url: string
+  // Added with the edit war timeline. Older apis do not send it.
+  history_url?: string
 }
 
 export interface Stats {
@@ -38,6 +40,9 @@ export interface EditEvent {
   server_url: string
   namespace: number
   change_type: string
+  // Link to the change on Wikipedia. Optional: older messages do not have them.
+  diff_url?: string
+  history_url?: string
 }
 
 export interface RevertEvent {
@@ -48,6 +53,9 @@ export interface RevertEvent {
   timestamp: string
   reason: string
   server_url: string
+  history_url?: string
+  // The user whose edit was undone, when the detector knows it.
+  reverted_user?: string | null
 }
 
 export type RuleKind = 'revert_war' | 'burst' | 'bot_spike'
@@ -67,6 +75,41 @@ export interface Alert {
   acknowledged_by: string | null
   created_at: string
   page_url: string
+  // History page of the article. null for wiki-wide alerts (title "*").
+  // Missing in alerts stored before the edit war timeline.
+  history_url?: string | null
+}
+
+// One edit of an edit war, from alert.evidence.timeline (oldest first, at most 25).
+// revert_war and burst alerts have it; evidence.timeline_truncated says whether
+// older edits were left out.
+export interface TimelineEntry {
+  event_id: string
+  user: string
+  is_bot: boolean
+  timestamp: string
+  comment: string
+  rev_id: number
+  old_rev_id: number
+  old_len: number
+  new_len: number
+  size_delta: number
+  is_revert: boolean
+  revert_reason: 'comment' | 'size_restore' | null
+  reverted_user: string | null
+  diff_url: string
+}
+
+// Answer of GET /api/diff. "html" is the <tr> rows of a MediaWiki diff table.
+export interface DiffResult {
+  server_url: string
+  rev_id: number
+  old_rev_id: number
+  html: string
+  from_user: string
+  to_user: string
+  comment: string
+  diff_url: string
 }
 
 export interface Rule {

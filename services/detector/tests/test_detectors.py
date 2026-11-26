@@ -1,6 +1,7 @@
 import pytest
 
 from editwar_detector.detectors import (
+    MAX_TIMELINE_ITEMS,
     BotSpikeDetector,
     BurstDetector,
     RevertWarDetector,
@@ -280,3 +281,112 @@ def test_create_detector(kind, cls):
     detector = create_detector(rule(kind, 1, 1))
     assert isinstance(detector, cls)
     assert detector.kind is kind
+
+
+# --- timeline evidence -------------------------------------------------------
+
+TIMELINE_KEYS = {
+    "event_id",
+    "user",
+    "is_bot",
+    "timestamp",
+    "comment",
+    "rev_id",
+    "old_rev_id",
+    "old_len",
+    "new_len",
+    "size_delta",
+    "is_revert",
+    "revert_reason",
+    "reverted_user",
+    "diff_url",
+}
+
+
+def test_revert_war_timeline_entries(make_event, clock):
+    detector = RevertWarDetector(rule(RuleKind.REVERT_WAR, 1, 1))
+    window = SlidingWindow(600)
+    edit = make_event(user="Vandal", old_len=1000, new_len=1400, comment="spam", is_bot=False)
+    window.add(edit)
+    clock.advance(10)
+    revert_edit = make_event(user="Patroller", old_len=1400, new_len=1000, comment="")
+    window.add(revert_edit)
+    window.add_revert(
+        RevertEvent(
+            event_id=revert_edit.event_id,
+            wiki=revert_edit.wiki,
+            title=revert_edit.title,
+            user="Patroller",
+            timestamp=revert_edit.timestamp,
+            reason="size_restore",
+            server_url=revert_edit.server_url,
+            reverted_user="Vandal",
+        )
+    )
+    alert = detector.evaluate(revert_edit, window)
+    assert alert is not None
+    first, second = alert.evidence["timeline"]
+    assert set(first) == TIMELINE_KEYS
+    assert first == {
+        "event_id": edit.event_id,
+        "user": "Vandal",
+        "is_bot": False,
+        "timestamp": edit.timestamp.isoformat(),
+        "comment": "spam",
+        "rev_id": edit.rev_id,
+        "old_rev_id": edit.old_rev_id,
+        "old_len": 1000,
+        "new_len": 1400,
+        "size_delta": 400,
+        "is_revert": False,
+        "revert_reason": None,
+        "reverted_user": None,
+        "diff_url": edit.diff_url(),
+    }
+    assert second["is_revert"] is True
+    assert second["revert_reason"] == "size_restore"
+    assert second["reverted_user"] == "Vandal"
+    assert second["size_delta"] == -400
+    assert alert.evidence["timeline_truncated"] is False
+    # existing evidence keys are still there
+    assert {"reverts", "distinct_users", "users", "event_ids"} <= set(alert.evidence)
+
+
+def test_timeline_is_oldest_first_and_capped(make_event, clock):
+    detector = BurstDetector(rule(RuleKind.BURST, threshold=5, min_users=2))
+    window = SlidingWindow(600)
+    events = []
+    for n in range(30):
+        events.append(make_event(user=f"user{n % 3}"))
+        window.add(events[-1])
+        clock.advance(1)
+    alert = detector.evaluate(events[-1], window)
+    assert alert is not None
+    timeline = alert.evidence["timeline"]
+    assert len(timeline) == MAX_TIMELINE_ITEMS == 25
+    assert [entry["event_id"] for entry in timeline] == [e.event_id for e in events[5:]]
+    stamps = [entry["timestamp"] for entry in timeline]
+    assert stamps == sorted(stamps)
+    assert alert.evidence["timeline_truncated"] is True
+    assert all(entry["is_revert"] is False for entry in timeline)
+
+
+def test_timeline_only_has_edits_inside_rule_window(make_event, clock):
+    detector = BurstDetector(rule(RuleKind.BURST, threshold=2, min_users=2, window_seconds=60))
+    window = SlidingWindow(3600)
+    window.add(make_event(user="Old"))
+    clock.advance(120)
+    fill(window, make_event, ["A"])
+    event = fill(window, make_event, ["B"])
+    alert = detector.evaluate(event, window)
+    assert alert is not None
+    assert [entry["user"] for entry in alert.evidence["timeline"]] == ["A", "B"]
+
+
+def test_bot_spike_has_no_timeline(make_event):
+    detector = BotSpikeDetector(rule(RuleKind.BOT_SPIKE, threshold=2, min_users=1))
+    window = SlidingWindow(60)
+    alert = detector.evaluate(fill(window, make_event, ["Bot1", "Bot1"], is_bot=True), window)
+    assert alert is not None
+    assert "timeline" not in alert.evidence
+    assert "timeline_truncated" not in alert.evidence

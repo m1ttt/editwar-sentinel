@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from editwar_domain import EditEvent, RevertEvent
+from editwar_domain.events import history_url
 
 if TYPE_CHECKING:
     from editwar_api.repositories import AlertRepository
@@ -82,6 +83,7 @@ class StatsService:
                 "title": title,
                 "reverts": reverts,
                 "page_url": page_url(urls[(wiki, title)], title),
+                "history_url": history_url(urls[(wiki, title)], title),
             }
             for (wiki, title), reverts in counts.most_common(n)
         ]

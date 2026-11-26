@@ -1,3 +1,4 @@
+import { resolveHistoryUrl } from '../lib/wiki'
 import type { DisputedArticle } from '../types'
 import { Panel } from './Panel'
 
@@ -15,24 +16,34 @@ export function DisputedPanel({ articles }: DisputedPanelProps) {
         <p className="empty">Sin reversiones en la última hora.</p>
       ) : (
         <ol className="ranking">
-          {articles.map((article, index) => (
-            <li key={`${article.wiki}:${article.title}`}>
-              <span className="rank mono">{String(index + 1).padStart(2, '0')}</span>
-              <span className="ranking-title">
-                <a href={article.page_url} target="_blank" rel="noreferrer">
-                  {article.title}
-                </a>
-                <span className="mono">{article.wiki}</span>
-              </span>
-              <span className="bar" aria-hidden="true">
-                <i style={{ width: `${(article.reverts / max) * 100}%` }} />
-              </span>
-              <span className="ranking-count mono">
-                {article.reverts}
-                <span className="sr-only"> reversiones</span>
-              </span>
-            </li>
-          ))}
+          {articles.map((article, index) => {
+            const history = resolveHistoryUrl(article)
+            return (
+              <li key={`${article.wiki}:${article.title}`}>
+                <span className="rank mono">{String(index + 1).padStart(2, '0')}</span>
+                <span className="ranking-title">
+                  <a href={article.page_url} target="_blank" rel="noreferrer">
+                    {article.title}
+                  </a>
+                  <span className="ranking-sub">
+                    <span className="mono">{article.wiki}</span>
+                    {history && (
+                      <a className="ext-link" href={history} target="_blank" rel="noreferrer">
+                        historial ↗
+                      </a>
+                    )}
+                  </span>
+                </span>
+                <span className="bar" aria-hidden="true">
+                  <i style={{ width: `${(article.reverts / max) * 100}%` }} />
+                </span>
+                <span className="ranking-count mono">
+                  {article.reverts}
+                  <span className="sr-only"> reversiones</span>
+                </span>
+              </li>
+            )
+          })}
         </ol>
       )}
     </Panel>
