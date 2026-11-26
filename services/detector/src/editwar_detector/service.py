@@ -6,12 +6,17 @@ sent. If the pod dies before the commit, Kafka gives the same events to the
 next pod, so no event is lost (some can be processed twice).
 
 The windows live in memory. After a restart they fill again from new events.
+
+Metrics (see editwar_detector.metrics) are recorded next to the /healthz
+counters. After each batch the loop also computes the consumer lag of this pod
+and caches it for the consumer_lag gauge.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -21,6 +26,7 @@ from typing import Any, Protocol
 from aiokafka.errors import KafkaError
 
 from editwar_detector.engine import DetectionEngine, ProcessResult
+from editwar_detector.metrics import DetectorMetrics
 from editwar_detector.rule_provider import RuleProvider
 from editwar_detector.sinks import AlertDispatcher, KafkaAlertSink
 from editwar_domain import TOPIC_REVERTS, EditEvent
@@ -50,6 +56,9 @@ class KafkaConsumer(KafkaClient, Protocol):
         self, *partitions: Any, timeout_ms: int = 0, max_records: Any = None
     ) -> Any: ...
     async def commit(self, offsets: Any = None) -> None: ...
+    def assignment(self) -> Any: ...
+    def highwater(self, partition: Any) -> int | None: ...
+    async def position(self, partition: Any) -> int: ...
 
 
 class KafkaProducer(KafkaClient, Protocol):
@@ -92,6 +101,8 @@ class DetectorService:
         retry_max_seconds: float = 30,
         poll_timeout_ms: int = 1000,
         max_records: int = 500,
+        metrics: DetectorMetrics | None = None,
+        clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.engine = engine
         self.dispatcher = dispatcher
@@ -104,6 +115,9 @@ class DetectorService:
         self.retry_max_seconds = retry_max_seconds
         self.poll_timeout_ms = poll_timeout_ms
         self.max_records = max_records
+        self.metrics = metrics or DetectorMetrics()
+        self.metrics.window_count = engine.window_count
+        self._clock = clock
         self.consumer: KafkaConsumer | None = None
         self.producer: KafkaProducer | None = None
         self.connected = False
@@ -132,8 +146,10 @@ class DetectorService:
                     timeout_ms=self.poll_timeout_ms, max_records=self.max_records
                 )
                 await self.process_batch(batch)
+                await self._update_lag(consumer)
         finally:
             self.connected = False
+            self.metrics.consumer_lag = None  # this pod no longer reads
             refresher.cancel()
             with suppress(asyncio.CancelledError):
                 await refresher
@@ -169,20 +185,24 @@ class DetectorService:
 
     async def handle(self, event: EditEvent) -> ProcessResult:
         """Process one edit and send its revert and alerts. Traced when OpenTelemetry is on."""
+        started = self._clock()
         if _tracer is None:  # pragma: no cover
-            return await self._handle(event)
-        with _tracer.start_as_current_span("detector.handle") as span:
-            span.set_attribute("editwar.wiki", event.wiki)
             result = await self._handle(event)
-            span.set_attribute("editwar.revert", result.revert is not None)
-            span.set_attribute("editwar.alerts", len(result.alerts))
-            return result
+        else:
+            with _tracer.start_as_current_span("detector.handle") as span:
+                span.set_attribute("editwar.wiki", event.wiki)
+                result = await self._handle(event)
+                span.set_attribute("editwar.revert", result.revert is not None)
+                span.set_attribute("editwar.alerts", len(result.alerts))
+        self.metrics.processing_time(self._clock() - started)
+        return result
 
     async def _handle(self, event: EditEvent) -> ProcessResult:
         if self.producer is None:
             raise RuntimeError("the producer is not connected")
         result = self.engine.process(event)
         self.stats_data.processed += 1
+        self.metrics.edit_processed()
         if result.revert is not None:
             await self.producer.send_and_wait(
                 TOPIC_REVERTS,
@@ -190,11 +210,13 @@ class DetectorService:
                 key=result.revert.partition_key().encode(),
             )
             self.stats_data.reverts += 1
+            self.metrics.revert(result.revert.reason)
         for alert in result.alerts:
             failed = await self.dispatcher.dispatch(alert)
             if any(sink.critical for sink in failed):
                 raise DeliveryError(f"alert {alert.id} was not published")
             self.stats_data.alerts += 1
+            self.metrics.alert(alert.kind, alert.severity.value)
         self._maybe_prune(event.timestamp)
         return result
 
@@ -223,6 +245,26 @@ class DetectorService:
         for partition, offset in offsets.items():
             name = f"{partition.topic}-{partition.partition}"
             self.stats_data.last_offsets[name] = offset - 1
+
+    async def _update_lag(self, consumer: KafkaConsumer) -> None:
+        """Cache the messages this pod is behind: high-water mark minus position.
+
+        Only partitions with a known high-water mark count. The mark comes with
+        a fetch answer, so their position is known too and position() returns
+        at once instead of waiting for an offset reset.
+        """
+        lag = 0
+        try:
+            for partition in consumer.assignment():
+                highwater = consumer.highwater(partition)
+                if highwater is None:
+                    continue
+                lag += max(0, highwater - await consumer.position(partition))
+        except (KafkaError, AssertionError) as error:
+            # A rebalance took a partition away. Keep the last value until the next batch.
+            log.debug("consumer lag not updated: %r", error)
+            return
+        self.metrics.consumer_lag = lag
 
     def _maybe_prune(self, now: datetime) -> None:
         """Every prune_interval_seconds of event time, free old windows."""

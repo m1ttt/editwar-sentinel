@@ -1,0 +1,728 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "crossComponentResources": [],
+        "parameters": [
+          {
+            "id": "5d0b1f0e-6a51-4c1e-9d0a-6f1b2a6b1a01",
+            "version": "KqlParameterItem/1.0",
+            "name": "Ambiente",
+            "label": "Ambiente",
+            "type": 2,
+            "description": "Selecciona el componente de Application Insights y el namespace editwar-<ambiente>.",
+            "isRequired": true,
+            "typeSettings": {
+              "additionalResourceOptions": [],
+              "showDefault": false
+            },
+            "jsonData": ${ambiente_options},
+            "value": "${default_appi_id}"
+          },
+          {
+            "id": "5d0b1f0e-6a51-4c1e-9d0a-6f1b2a6b1a02",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Rango de tiempo",
+            "type": 4,
+            "isRequired": true,
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 900000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                }
+              ],
+              "allowCustom": true
+            },
+            "value": {
+              "durationMs": 3600000
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parametros"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## EditWar Ops\nTablero operativo de EditWar Sentinel. **Ambiente** cambia el componente de Application Insights (`appi-…-<ambiente>`) y el namespace de Kubernetes (`editwar-<ambiente>`). Las gráficas de Application Insights muestran las marcas de despliegue (anotaciones `Deployment`) que crean los pipelines.\n\nFuentes: Application Insights (`requests`, `dependencies`, `exceptions`, `traces`, `customMetrics`), Container Insights en Log Analytics (`KubePodInventory`, `KubeNodeInventory`, `KubeEvents`, `Perf`) y Azure Resource Graph (alertas). La salida estándar de los contenedores (`ContainerLogV2`) no se recolecta: los logs de la aplicación están en `traces`."
+      },
+      "name": "intro"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "1. Estado",
+        "expandable": true,
+        "expanded": true,
+        "loadType": "always",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let av = availabilityResults\n    | where timestamp {TimeRange}\n    | summarize total = sum(itemCount), ok = sumif(itemCount, tostring(success) in~ ('true', '1'));\nlet rq = requests\n    | where timestamp {TimeRange}\n    | summarize total = sum(itemCount), ok = sumif(itemCount, tostring(success) in~ ('true', '1'));\nunion\n    (av | project Orden = 1, Indicador = 'Pruebas de disponibilidad', Valor = iff(isnull(total) or total == 0, 'Sin pruebas configuradas', strcat(tostring(round(100.0 * ok / total, 2)), ' %'))),\n    (rq | project Orden = 2, Indicador = 'Requests exitosos', Valor = iff(isnull(total) or total == 0, 'Sin requests', strcat(tostring(round(100.0 * ok / total, 2)), ' %')))\n| order by Orden asc\n| project-away Orden",
+              "size": 4,
+              "title": "Disponibilidad",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "tiles",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "Indicador",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "Valor",
+                  "formatter": 1
+                },
+                "showBorder": true
+              }
+            },
+            "name": "estado-disponibilidad",
+            "customWidth": "35"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "// application_Version = service.version = SERVICE_VERSION (sha-<commit>) set by the pipeline.\nunion\n    (requests | where timestamp {TimeRange} | summarize arg_max(timestamp, application_Version) by cloud_RoleName),\n    (traces | where timestamp {TimeRange} | summarize arg_max(timestamp, application_Version) by cloud_RoleName)\n| where isnotempty(cloud_RoleName)\n| summarize arg_max(timestamp, application_Version) by cloud_RoleName\n| project Servicio = cloud_RoleName, ['Versión'] = application_Version, ['Última telemetría'] = timestamp\n| order by Servicio asc",
+              "size": 0,
+              "title": "Versión desplegada por servicio",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "estado-version",
+            "customWidth": "30"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "alertsmanagementresources\n| where type =~ 'microsoft.alertsmanagement/alerts'\n| where tostring(properties.essentials.targetResourceGroup) =~ '${resource_group_name}'\n| where tostring(properties.essentials.monitorCondition) =~ 'Fired'\n| where tostring(properties.essentials.alertState) !~ 'Closed'\n| project Alerta = tostring(properties.essentials.alertRule),\n    Severidad = tostring(properties.essentials.severity),\n    Estado = tostring(properties.essentials.alertState),\n    Recurso = tostring(properties.essentials.targetResourceName),\n    Inicio = todatetime(properties.essentials.startDateTime)\n| order by Inicio desc",
+              "size": 0,
+              "title": "Alertas de Azure Monitor activas (grupo ${resource_group_name})",
+              "noDataMessage": "No hay alertas activas en el grupo de recursos.",
+              "visualization": "table",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "/subscriptions/${subscription_id}"
+              ]
+            },
+            "name": "estado-alertas",
+            "customWidth": "35"
+          }
+        ]
+      },
+      "name": "seccion-estado"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "2. Negocio",
+        "expandable": true,
+        "expanded": true,
+        "loadType": "always",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.detector.edits_processed'\n| summarize total = sum(valueSum) by bin(timestamp, {TimeRange:grain})\n| extend ['Ediciones/s'] = round(total / ({TimeRange:grain} / 1s), 3)\n| project-away total\n| order by timestamp asc",
+              "size": 0,
+              "title": "Ediciones procesadas por segundo (detector)",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "negocio-ediciones",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.ingestor.events'\n| summarize total = sum(valueSum) by bin(timestamp, {TimeRange:grain}), Resultado = tostring(customDimensions.outcome)\n| extend ['Eventos/s'] = round(total / ({TimeRange:grain} / 1s), 3)\n| project-away total\n| order by timestamp asc",
+              "size": 0,
+              "title": "Eventos del ingestor por resultado (eventos/s)",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "negocio-ingestor",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.detector.reverts'\n| summarize Reversiones = sum(valueSum) by bin(timestamp, {TimeRange:grain}), ['Razón'] = tostring(customDimensions.reason)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Reversiones por razón",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "negocio-reverts",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.detector.alerts'\n| summarize Alertas = sum(valueSum) by Tipo = tostring(customDimensions.kind), Severidad = tostring(customDimensions.severity)\n| order by Alertas desc",
+              "size": 0,
+              "title": "Alertas por tipo y severidad",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "barchart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "negocio-alertas",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "// The api logs \"alert <id> stored: ...\" with alert_kind, wiki, article and severity in customDimensions.\ntraces\n| where timestamp {TimeRange}\n| where cloud_RoleName == 'api'\n| where message has 'stored' and isnotempty(customDimensions.alert_kind)\n| extend Wiki = tostring(customDimensions.wiki), ['Artículo'] = tostring(customDimensions.article),\n    Tipo = tostring(customDimensions.alert_kind), Severidad = tostring(customDimensions.severity)\n| summarize Alertas = count(), Tipos = make_set(Tipo, 5), Severidades = make_set(Severidad, 5), ['Última'] = max(timestamp) by Wiki, ['Artículo']\n| top 15 by Alertas desc",
+              "size": 0,
+              "title": "Artículos más disputados (alertas guardadas por la api)",
+              "noDataMessage": "Sin alertas guardadas en el rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "negocio-top-articulos"
+          }
+        ]
+      },
+      "name": "seccion-negocio"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "3. Aplicación",
+        "expandable": true,
+        "expanded": true,
+        "loadType": "always",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where timestamp {TimeRange}\n| summarize Requests = sum(itemCount), Fallos = sumif(itemCount, tostring(success) !in~ ('true', '1')) by bin(timestamp, {TimeRange:grain})\n| order by timestamp asc",
+              "size": 0,
+              "title": "Requests y fallos",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "app-requests-tiempo",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where timestamp {TimeRange}\n| summarize p95 = round(percentile(duration, 95), 1) by bin(timestamp, {TimeRange:grain}), cloud_RoleName\n| order by timestamp asc",
+              "size": 0,
+              "title": "Duración p95 por servicio (ms)",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "app-p95-tiempo",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where timestamp {TimeRange}\n| summarize Requests = sum(itemCount), Fallos = sumif(itemCount, tostring(success) !in~ ('true', '1')),\n    ['p95 (ms)'] = round(percentile(duration, 95), 1) by Servicio = cloud_RoleName, ['Operación'] = operation_Name\n| extend ['% fallos'] = round(100.0 * Fallos / Requests, 2)\n| project Servicio, ['Operación'], Requests, Fallos, ['% fallos'], ['p95 (ms)']\n| order by Requests desc\n| take 50",
+              "size": 0,
+              "title": "Operaciones: volumen, % de fallos y p95",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "app-operaciones"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "dependencies\n| where timestamp {TimeRange}\n| summarize Llamadas = sum(itemCount), Fallos = sumif(itemCount, tostring(success) !in~ ('true', '1')),\n    ['p95 (ms)'] = round(percentile(duration, 95), 1) by Servicio = cloud_RoleName, Tipo = type, Destino = target\n| extend ['% fallos'] = round(100.0 * Fallos / Llamadas, 2)\n| order by Llamadas desc\n| take 30",
+              "size": 0,
+              "title": "Dependencias",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "app-dependencias",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "exceptions\n| where timestamp {TimeRange}\n| summarize Cantidad = sum(itemCount), ['Última'] = max(timestamp)\n    by Servicio = cloud_RoleName, Tipo = type, Mensaje = coalesce(outerMessage, innermostMessage)\n| order by Cantidad desc\n| take 30",
+              "size": 0,
+              "title": "Excepciones",
+              "noDataMessage": "Sin excepciones en el rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "app-excepciones",
+            "customWidth": "50"
+          }
+        ]
+      },
+      "name": "seccion-aplicacion"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "4. Pipeline de datos",
+        "expandable": true,
+        "expanded": true,
+        "loadType": "always",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.detector.consumer_lag'\n| summarize v = avg(value) by bin(timestamp, {TimeRange:grain}), cloud_RoleInstance\n| summarize ['Lag'] = round(sum(v), 1) by timestamp\n| order by timestamp asc",
+              "size": 0,
+              "title": "Lag del consumidor del detector (mensajes)",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "pipe-lag",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ns = 'editwar-{Ambiente:label}';\nKubePodInventory\n| where TimeGenerated {TimeRange}\n| where Namespace == ns and Name startswith 'detector-' and PodStatus == 'Running'\n| summarize ['Réplicas'] = dcount(Name) by bin(TimeGenerated, {TimeRange:grain})\n| order by TimeGenerated asc",
+              "size": 0,
+              "title": "Réplicas del detector (pods Running)",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "pipe-replicas",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.detector.processing_seconds'\n| summarize s = sum(valueSum), c = sum(valueCount) by bin(timestamp, {TimeRange:grain})\n| project timestamp, ['Procesamiento (ms)'] = iff(c == 0, real(null), round(1000 * s / c, 2))\n| order by timestamp asc",
+              "size": 0,
+              "title": "Tiempo de procesamiento del detector, promedio (ms)",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "pipe-procesamiento",
+            "customWidth": "33"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.ingestor.event_lag_seconds'\n| summarize s = sum(valueSum), c = sum(valueCount) by bin(timestamp, {TimeRange:grain})\n| project timestamp, ['Retraso (s)'] = iff(c == 0, real(null), round(1 * s / c, 2))\n| order by timestamp asc",
+              "size": 0,
+              "title": "Retraso de los eventos al ingestor, promedio (s)",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "pipe-event-lag",
+            "customWidth": "33"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where timestamp {TimeRange}\n| where name == 'editwar.detector.open_windows'\n| summarize v = avg(value) by bin(timestamp, {TimeRange:grain}), cloud_RoleInstance\n| summarize ['Ventanas'] = round(sum(v), 1) by timestamp\n| order by timestamp asc",
+              "size": 0,
+              "title": "Ventanas abiertas en el detector",
+              "noDataMessage": "Sin datos todavía: la métrica personalizada aún no llega a customMetrics en este rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ],
+              "showAnnotations": true
+            },
+            "name": "pipe-ventanas",
+            "customWidth": "33"
+          }
+        ]
+      },
+      "name": "seccion-pipeline"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "5. Clúster",
+        "expandable": true,
+        "expanded": true,
+        "loadType": "always",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ns = 'editwar-{Ambiente:label}';\nlet pods = KubePodInventory\n    | where TimeGenerated {TimeRange}\n    | where Namespace == ns\n    | distinct PodUid, Pod = Name;\nPerf\n| where TimeGenerated {TimeRange}\n| where ObjectName == 'K8SContainer' and CounterName == 'cpuUsageNanoCores'\n// InstanceName = <cluster id>/<pod uid>/<container>\n| extend parts = split(InstanceName, '/')\n| extend PodUid = tostring(parts[array_length(parts) - 2])\n| join kind=inner pods on PodUid\n| summarize v = avg(CounterValue) by bin(TimeGenerated, {TimeRange:grain}), Pod, InstanceName\n| summarize ['CPU (m)'] = round(sum(v) / 1000000.0, 1) by TimeGenerated, Pod\n| order by TimeGenerated asc",
+              "size": 0,
+              "title": "CPU por pod (milicores)",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "cluster-cpu",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ns = 'editwar-{Ambiente:label}';\nlet pods = KubePodInventory\n    | where TimeGenerated {TimeRange}\n    | where Namespace == ns\n    | distinct PodUid, Pod = Name;\nPerf\n| where TimeGenerated {TimeRange}\n| where ObjectName == 'K8SContainer' and CounterName == 'memoryWorkingSetBytes'\n// InstanceName = <cluster id>/<pod uid>/<container>\n| extend parts = split(InstanceName, '/')\n| extend PodUid = tostring(parts[array_length(parts) - 2])\n| join kind=inner pods on PodUid\n| summarize v = avg(CounterValue) by bin(TimeGenerated, {TimeRange:grain}), Pod, InstanceName\n| summarize ['Memoria (MiB)'] = round(sum(v) / 1048576.0, 1) by TimeGenerated, Pod\n| order by TimeGenerated asc",
+              "size": 0,
+              "title": "Memoria por pod (working set, MiB)",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "cluster-memoria",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ns = 'editwar-{Ambiente:label}';\nKubePodInventory\n| where TimeGenerated {TimeRange}\n| where Namespace == ns\n| summarize arg_max(TimeGenerated, PodStatus, ContainerStatus, ContainerStatusReason, ContainerRestartCount),\n    primero = min(ContainerRestartCount) by Pod = Name, ContainerName\n| summarize Estado = take_any(PodStatus), ['Reinicios en el rango'] = sum(ContainerRestartCount - primero),\n    ['Reinicios totales'] = sum(ContainerRestartCount), ['Motivo'] = make_set_if(ContainerStatusReason, isnotempty(ContainerStatusReason), 3),\n    ['Visto'] = max(TimeGenerated) by Pod\n| order by ['Reinicios en el rango'] desc, Pod asc",
+              "size": 0,
+              "title": "Pods: estado y reinicios",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "cluster-pods",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ns = 'editwar-{Ambiente:label}';\nKubeEvents\n| where TimeGenerated {TimeRange}\n| where Namespace == ns and KubeEventType == 'Warning'\n| summarize Cantidad = count(), ['Último'] = max(TimeGenerated), Mensaje = take_any(Message) by Motivo = Reason, Objeto = Name\n| order by ['Último'] desc\n| take 30",
+              "size": 0,
+              "title": "Eventos Warning de Kubernetes",
+              "noDataMessage": "Sin eventos Warning en el namespace.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "cluster-eventos",
+            "customWidth": "50"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "KubeNodeInventory\n| where TimeGenerated {TimeRange}\n| summarize arg_max(TimeGenerated, Status, KubeletVersion) by Nodo = Computer\n| project Nodo, Estado = Status, Kubelet = KubeletVersion, ['Último reporte'] = TimeGenerated",
+              "size": 0,
+              "title": "Estado del nodo",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "cluster-nodo",
+            "customWidth": "40"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let cap = Perf\n    | where TimeGenerated {TimeRange}\n    | where ObjectName == 'K8SNode' and CounterName in ('cpuCapacityNanoCores', 'memoryCapacityBytes')\n    | summarize cpuCap = maxif(CounterValue, CounterName == 'cpuCapacityNanoCores'),\n        memCap = maxif(CounterValue, CounterName == 'memoryCapacityBytes') by Computer;\nPerf\n| where TimeGenerated {TimeRange}\n| where ObjectName == 'K8SNode' and CounterName in ('cpuUsageNanoCores', 'memoryWorkingSetBytes')\n| summarize cpu = avgif(CounterValue, CounterName == 'cpuUsageNanoCores'),\n    mem = avgif(CounterValue, CounterName == 'memoryWorkingSetBytes') by bin(TimeGenerated, {TimeRange:grain}), Computer\n| join kind=inner cap on Computer\n| project TimeGenerated, ['CPU %'] = round(100.0 * cpu / cpuCap, 1), ['Memoria %'] = round(100.0 * mem / memCap, 1)\n| order by TimeGenerated asc",
+              "size": 0,
+              "title": "Uso del nodo (% de la capacidad)",
+              "noDataMessage": "Sin datos en el rango. Si el servicio acaba de desplegarse, espere unos minutos.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "timechart",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "${workspace_id}"
+              ]
+            },
+            "name": "cluster-nodo-uso",
+            "customWidth": "60"
+          }
+        ]
+      },
+      "name": "seccion-cluster"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "6. Logs recientes (warning, error y excepciones)",
+        "expandable": true,
+        "expanded": true,
+        "loadType": "always",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "union\n    (traces\n        | where timestamp {TimeRange}\n        | where severityLevel >= 2\n        | project timestamp, Servicio = cloud_RoleName, Nivel = case(severityLevel == 2, 'Warning', severityLevel == 3, 'Error', 'Critical'),\n            Mensaje = message, operation_Id),\n    (exceptions\n        | where timestamp {TimeRange}\n        | project timestamp, Servicio = cloud_RoleName, Nivel = 'Excepción',\n            Mensaje = strcat(type, ': ', coalesce(outerMessage, innermostMessage)), operation_Id)\n| top 100 by timestamp desc",
+              "size": 0,
+              "title": "Últimos 100 mensajes con severidad Warning o mayor",
+              "noDataMessage": "Sin warnings, errores ni excepciones en el rango.",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "timeContextFromParameter": "TimeRange",
+              "visualization": "table",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{Ambiente}"
+              ]
+            },
+            "name": "logs-recientes"
+          }
+        ]
+      },
+      "name": "seccion-logs"
+    }
+  ],
+  "fallbackResourceIds": [
+    "${default_appi_id}"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

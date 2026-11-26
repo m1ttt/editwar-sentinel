@@ -15,7 +15,9 @@ created after configure_azure_monitor(). FastAPIInstrumentor.instrument_app()
 is therefore also called on the app; a second call on an app that is already
 instrumented does nothing. Every request then becomes a request in
 Application Insights, with its exceptions, and the "editwar.api" logs go to
-the traces table with their `extra` values as custom dimensions.
+the traces table with their `extra` values as custom dimensions. The business
+metrics of editwar_api.metrics go to customMetrics: create_app() makes one
+ApiMetrics and gives it to the hub gauge, the AlertConsumer and the DiffService.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from editwar_api.controllers import AlertController, RuleController
 from editwar_api.db import make_engine, make_sessions, run_migrations
 from editwar_api.diffs import DiffService, diff_router
 from editwar_api.geo import GeoService
+from editwar_api.metrics import ApiMetrics
 from editwar_api.repositories import AlertRepository, RuleRepository
 from editwar_api.stats import StatsService
 from editwar_api.websocket import WebSocketHub
@@ -173,20 +176,22 @@ def geo_router() -> APIRouter:
     return router
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, metrics: ApiMetrics | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     telemetry_active = configure_telemetry("api")
+    metrics = metrics or ApiMetrics()
 
     engine = make_engine(settings.database_url)
     sessions = make_sessions(engine)
     rules = RuleRepository(sessions)
     alerts = AlertRepository(sessions)
     hub = WebSocketHub(edits_per_second=settings.edit_sample_per_second)
+    metrics.websocket_clients = hub.connection_count
     stats = StatsService(alerts)
-    alert_consumer = AlertConsumer(alerts, hub)
+    alert_consumer = AlertConsumer(alerts, hub, metrics)
     geo = GeoService(max_points=settings.geo_max_points) if settings.geo_enabled else None
     live_consumer = LiveConsumer(stats, hub, geo)
-    diffs = DiffService()
+    diffs = DiffService(metrics=metrics)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -232,6 +237,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.live_consumer = live_consumer
     app.state.geo = geo
     app.state.diffs = diffs
+    app.state.metrics = metrics
 
     app.include_router(system_router(settings))
     app.include_router(geo_router())

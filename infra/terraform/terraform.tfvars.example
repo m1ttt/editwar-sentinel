@@ -10,9 +10,13 @@ tenant_id       = "00000000-0000-0000-0000-000000000000"
 # node_count         = 1
 # kubernetes_version = null
 # log_daily_quota_gb = -1
-# alert_email        = ""
+# alert_email        = ""   # comma-separated emails for Prod alerts
+# enable_dev_log_alerts = false
+# availability_test_frequency = 900
 # github_repo        = "m1ttt/editwar-sentinel"
 # create_github_identity = true
+# github_annotations_role = "builtin" # "custom" (least privilege) needs Owner or User Access Administrator
+# workbook_display_name  = "EditWar Ops"
 
 # GitHub repositories with immutable OIDC subjects need the full prefix:
 #   gh api repos/m1ttt/editwar-sentinel/actions/oidc/customization/sub --jq .sub_claim_prefix

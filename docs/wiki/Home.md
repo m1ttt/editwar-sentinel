@@ -8,6 +8,8 @@ Materia: Infraestructura para el Desarrollo Continuo (O2026_ESI3905O), ITESO.
 
 - [Arquitectura](Arquitectura): componentes, clases, stack, infraestructura y despliegue.
 - [Pipelines y ramas](Pipelines-y-ramas): GitFlow, pipelines de backend, frontend e infraestructura.
+- [Observabilidad](Observabilidad): tablero EditWar Ops, Application Insights, Container Insights, alertas, marcas de despliegue y consultas KQL.
+- [Runbooks](Runbooks): qué hacer cuando se dispara cada alerta de Azure Monitor.
 - [Reporte](Reporte): arquitectura explicada, distribución de actividades, conclusiones y mejoras pendientes.
 - Propuesta original: [EditWar-Sentinel-Propuesta](https://github.com/m1ttt/editwar-sentinel/blob/main/docs/EditWar-Sentinel-Propuesta.md).
 - Cambios contra la propuesta: [Rubrica-vs-Propuesta](https://github.com/m1ttt/editwar-sentinel/blob/main/docs/Rubrica-vs-Propuesta.md).

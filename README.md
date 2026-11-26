@@ -56,6 +56,7 @@ make demo-kill-detector
 - Wiki pages: [docs/wiki](docs/wiki/Home.md) (architecture, pipelines and branches)
 - Deployment and pipelines: [deploy/README.md](deploy/README.md)
 - Azure infrastructure: [infra/README.md](infra/README.md)
+- Observability (EditWar Ops workbook, release annotations, KQL queries): [docs/wiki/Observabilidad.md](docs/wiki/Observabilidad.md)
 - Proposal: [docs/EditWar-Sentinel-Propuesta.md](docs/EditWar-Sentinel-Propuesta.md) ([PDF](docs/EditWar-Sentinel-Propuesta.pdf))
 - Final rubric against the proposal: [docs/Rubrica-vs-Propuesta.md](docs/Rubrica-vs-Propuesta.md)
 - Backlog script: [scripts/crear_backlog.sh](scripts/crear_backlog.sh)

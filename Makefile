@@ -69,9 +69,9 @@ demo-kill-detector: ## Resilience demo: delete the detector pods and watch Kuber
 	kubectl -n $(NAMESPACE) delete pod -l app=detector
 	kubectl -n $(NAMESPACE) get pods -l app=detector -w
 
-tf-fmt: ## Format the Terraform code in infra/
-	terraform -chdir=infra fmt -recursive
+tf-fmt: ## Format the Terraform code in infra/terraform/
+	terraform -chdir=infra/terraform fmt -recursive
 
 tf-validate: ## Validate the Terraform code without a backend
-	terraform -chdir=infra init -backend=false -input=false
-	terraform -chdir=infra validate
+	terraform -chdir=infra/terraform init -backend=false -input=false
+	terraform -chdir=infra/terraform validate

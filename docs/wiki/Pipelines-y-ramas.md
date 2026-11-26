@@ -33,7 +33,7 @@ Imágenes: `m1ttt/editwar-ingestor`, `m1ttt/editwar-detector`, `m1ttt/editwar-ap
 
 ### Despliegue
 
-Los jobs `deploy-*` entran a Azure con OIDC (sin contraseñas), copian `deploy/k8s`, fijan la imagen `sha-<commit>`, el host del ingress y `SERVICE_VERSION`, y ejecutan `kubectl apply -k`. Al final hacen un smoke test contra `/api/version` y comprueban que la versión sea el commit desplegado.
+Los jobs `deploy-*` entran a Azure con OIDC (sin contraseñas), copian `deploy/k8s`, fijan la imagen `sha-<commit>`, el host del ingress y `SERVICE_VERSION`, y ejecutan `kubectl apply -k`. Al final hacen un smoke test contra `/api/version` y comprueban que la versión sea el commit desplegado. Si el smoke test pasa, crean una anotación de release en Application Insights (ver [Observabilidad](Observabilidad#marcas-de-despliegue-anotaciones)). Si la anotación falla, el job deja un aviso y no falla.
 
 El environment `prod` de GitHub tiene revisores obligatorios, así que `deploy-prod` espera una aprobación manual.
 
