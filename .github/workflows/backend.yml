@@ -121,7 +121,10 @@ jobs:
   build:
     name: Build y push (${{ matrix.service }})
     needs: [quality, test]
-    if: github.event_name == 'push'
+    # Set the repository variable CD_ENABLED=true once the Docker Hub secrets and the
+    # Azure variables exist. Until then the pipeline stops after the tests, and the
+    # deploy jobs (which need this job) are skipped too.
+    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
