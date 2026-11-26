@@ -1,6 +1,6 @@
 [project]
 name = "editwar-domain"
-version = "1.0.0"
+version = "1.1.0"
 description = "Shared domain model, topic names and settings for EditWar Sentinel."
 requires-python = ">=3.12"
 dependencies = []
