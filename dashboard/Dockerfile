@@ -8,7 +8,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-RUN npm run build
+# Commit of this build. The header shows it, and /version.json lets the pipeline check it.
+ARG APP_VERSION=dev
+ENV VITE_APP_VERSION=$APP_VERSION
+RUN npm run build && printf '{"service":"dashboard","version":"%s"}\n' "$APP_VERSION" > dist/version.json
 
 # ---- Stage 2: serve them with nginx as a non-root user ----
 FROM nginxinc/nginx-unprivileged:1.27-alpine

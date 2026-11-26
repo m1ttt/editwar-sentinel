@@ -88,6 +88,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Version of this build
+        id: ver
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: Image tags
         id: meta
         uses: docker/metadata-action@v5
@@ -106,6 +109,8 @@ jobs:
         with:
           context: dashboard
           push: true
+          build-args: |
+            APP_VERSION=${{ steps.ver.outputs.tag }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=dashboard
@@ -147,6 +152,7 @@ jobs:
         id: roll
         run: |
           TAG="sha-${GITHUB_SHA::7}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
           # First deploy: the backend pipeline has not created the stack yet. Skip without failing.
           if ! kubectl -n "$NAMESPACE" get deployment dashboard >/dev/null 2>&1; then
             echo "::notice::deployment/dashboard does not exist in $NAMESPACE yet. Run the backend pipeline first."
@@ -156,18 +162,19 @@ jobs:
           kubectl -n "$NAMESPACE" set image deployment/dashboard "dashboard=m1ttt/editwar-dashboard:$TAG"
           kubectl -n "$NAMESPACE" rollout status deployment/dashboard --timeout=300s
           echo "deployed=true" >> "$GITHUB_OUTPUT"
-      - name: Smoke test (dashboard answers 200)
+      - name: Smoke test (/version.json must report this commit)
         if: steps.roll.outputs.deployed == 'true'
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 5 -o /dev/null "http://$HOST/"; then
-              echo "OK: http://$HOST/ answers"
+            BODY=$(curl -fsS --max-time 5 "http://$HOST/version.json" || true)
+            echo "Attempt $i: $BODY"
+            if echo "$BODY" | grep -q "$TAG"; then
+              echo "OK: $HOST serves dashboard $TAG"
               exit 0
             fi
-            echo "Attempt $i failed"
             sleep 10
           done
-          echo "::error::http://$HOST/ does not answer"
+          echo "::error::http://$HOST/version.json does not report $TAG"
           exit 1
 
   deploy-prod:
@@ -205,6 +212,7 @@ jobs:
         id: roll
         run: |
           TAG="sha-${GITHUB_SHA::7}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
           # First deploy: the backend pipeline has not created the stack yet. Skip without failing.
           if ! kubectl -n "$NAMESPACE" get deployment dashboard >/dev/null 2>&1; then
             echo "::notice::deployment/dashboard does not exist in $NAMESPACE yet. Run the backend pipeline first."
@@ -214,16 +222,17 @@ jobs:
           kubectl -n "$NAMESPACE" set image deployment/dashboard "dashboard=m1ttt/editwar-dashboard:$TAG"
           kubectl -n "$NAMESPACE" rollout status deployment/dashboard --timeout=300s
           echo "deployed=true" >> "$GITHUB_OUTPUT"
-      - name: Smoke test (dashboard answers 200)
+      - name: Smoke test (/version.json must report this commit)
         if: steps.roll.outputs.deployed == 'true'
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 5 -o /dev/null "http://$HOST/"; then
-              echo "OK: http://$HOST/ answers"
+            BODY=$(curl -fsS --max-time 5 "http://$HOST/version.json" || true)
+            echo "Attempt $i: $BODY"
+            if echo "$BODY" | grep -q "$TAG"; then
+              echo "OK: $HOST serves dashboard $TAG"
               exit 0
             fi
-            echo "Attempt $i failed"
             sleep 10
           done
-          echo "::error::http://$HOST/ does not answer"
+          echo "::error::http://$HOST/version.json does not report $TAG"
           exit 1

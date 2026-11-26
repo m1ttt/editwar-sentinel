@@ -27,6 +27,10 @@ server {
     }
 
     # index.html names the current hashed assets, so the browser must always revalidate it.
+    location = /version.json {
+        add_header Cache-Control "no-cache";
+    }
+
     location = /index.html {
         add_header Cache-Control "no-cache";
     }
