@@ -133,6 +133,7 @@ Haz estos pasos una vez, en Settings del repositorio.
 | `TFSTATE_RESOURCE_GROUP` | Grupo de recursos de la cuenta de almacenamiento del estado. |
 | `TFSTATE_STORAGE_ACCOUNT` | Cuenta de almacenamiento del estado de Terraform. |
 | `TFSTATE_CONTAINER` | Contenedor del estado. |
+| `CD_ENABLED` | `true` cuando ya existen los secretos de Docker Hub y las variables de Azure. Sin este valor, los pipelines terminan después de las pruebas y no ejecutan `build` ni `deploy`. |
 
 **Secrets**
 
@@ -165,8 +166,8 @@ Las peticiones (requests) están dimensionadas para 2 nodos Standard_B2s con los
 
 | Namespace | CPU (requests) | Memoria (requests) |
 |---|---|---|
-| `editwar-dev`, mínimo | 335m | 1024 Mi |
-| `editwar-prod`, mínimo (api con 2 réplicas) | 385m | 1152 Mi |
-| Cada namespace, máximo (api 4, detector 6) | 735m | 2048 Mi |
+| `editwar-dev`, mínimo | 385m | 1024 Mi |
+| `editwar-prod`, mínimo (api con 2 réplicas) | 485m | 1152 Mi |
+| Cada namespace, máximo (api 4, detector 6) | 935m | 2048 Mi |
 
 Kafka usa un heap de 384 MB (`KAFKA_HEAP_OPTS`) y un límite de 768 Mi.

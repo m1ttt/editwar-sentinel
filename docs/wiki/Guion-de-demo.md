@@ -6,7 +6,9 @@ Los pasos siguen el orden de los criterios de la rúbrica.
 
 1. Encienda el clúster al menos una hora antes. Así el ranking y el historial de alertas ya tienen datos reales.
 2. Abra estas pestañas: el repositorio, el board, la pestaña Actions, la URL de dev, la URL de prod, AKS > Insights y Application Insights de dev.
-3. Prepare una rama `hotfix/<versión>` o `release/<versión>` con un cambio pequeño y visible, por ejemplo un texto del encabezado del dashboard.
+3. Prepare una rama `hotfix/<versión>` desde `main` con un cambio pequeño de backend. Ejemplo: cambie el nombre de una regla en `default_rules()` o agregue un campo a `GET /api/version`, y ajuste su prueba. Un cambio de backend corre `backend.yml`: pruebas unitarias con pytest, build, dev y prod.
+   - El encabezado del dashboard muestra `api sha-<commit>` (de `/api/version`) y `ui sha-<commit>` (de la imagen del dashboard). Un cambio de backend cambia solo `api`. Un cambio en `dashboard/` corre `frontend.yml` y cambia solo `ui`.
+   - Al desplegar la api, se reinician las estadísticas en memoria (ediciones por segundo y ranking). Las alertas y las reglas siguen en PostgreSQL.
 4. Confirme que un segundo integrante puede aprobar el PR y el environment `prod`.
 
 ## Durante la presentación
@@ -20,9 +22,9 @@ Los pasos siguen el orden de los criterios de la rúbrica.
 | Autorizar el PR | El segundo integrante aprueba el PR. Haga el merge |
 | Ejecutar el pipeline en Dev | Actions > el run del merge: `quality`, `test`, `build` y `deploy-dev` |
 | Ver las pruebas unitarias | Los checks "Reporte de pruebas (<paquete>)" del run y el comentario en el PR |
-| Ver el proyecto en Dev | La URL de dev. El encabezado muestra `sha-<commit>` y la etiqueta DEV |
+| Ver el proyecto en Dev | La URL de dev. El encabezado muestra `api sha-<commit>` con el commit nuevo y la etiqueta DEV. El job `deploy-dev` también lo comprueba en su smoke test |
 | Aprobar el pipeline a Prod | El job `deploy-prod` espera. Review deployments > Approve |
-| Ver el cambio en Prod | La URL de prod muestra el mismo `sha-<commit>` y la etiqueta PROD |
+| Ver el cambio en Prod | La URL de prod muestra el mismo `api sha-<commit>` y la etiqueta PROD |
 | APM: trazas | Application Insights > Transaction search: un request a `/api/stats` o `/api/rules` con su duración y su operación |
 | APM: errores | Abra `<url-dev>/api/debug/error`. Application Insights > Failures muestra `DebugError` |
 | APM: mensajes | Abra `<url-dev>/api/debug/log?message=demo`. Application Insights > Logs: `traces \| where message has "demo"` |
@@ -41,4 +43,14 @@ Kubernetes crea un pod nuevo. El detector sigue desde el último offset confirma
 
 ## Plan B sin internet
 
-Si el stream de Wikimedia falla, cambie `EVENT_SOURCE=replay` en el ConfigMap `editwar-config` y reinicie el ingestor. El ingestor reproduce 3000 eventos reales grabados.
+Si el stream de Wikimedia falla, cambie la fuente del ingestor:
+
+```bash
+kubectl -n editwar-prod set env deploy/ingestor EVENT_SOURCE=replay
+```
+
+Kubernetes reinicia el ingestor, que reproduce 3000 eventos reales grabados. Para regresar al stream en vivo, quite la variable:
+
+```bash
+kubectl -n editwar-prod set env deploy/ingestor EVENT_SOURCE-
+```

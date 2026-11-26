@@ -176,3 +176,30 @@ def test_main_runs_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(main_module.uvicorn, "run", fake_run)
     main_module.main()
     assert (calls["host"], calls["port"]) == ("0.0.0.0", 8123)
+
+
+async def test_wait_for_database_retries_then_succeeds() -> None:
+    from editwar_api.app import wait_for_database
+
+    calls = 0
+
+    async def migrate() -> None:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise ConnectionRefusedError("postgres is starting")
+
+    await wait_for_database(migrate, attempts=5, first_delay=0.001)
+    assert calls == 3
+
+
+async def test_wait_for_database_gives_up() -> None:
+    import pytest as _pytest
+
+    from editwar_api.app import wait_for_database
+
+    async def migrate() -> None:
+        raise ConnectionRefusedError("postgres is down")
+
+    with _pytest.raises(ConnectionRefusedError):
+        await wait_for_database(migrate, attempts=2, first_delay=0.001)
