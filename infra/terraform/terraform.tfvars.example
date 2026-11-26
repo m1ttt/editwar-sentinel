@@ -13,3 +13,7 @@ tenant_id       = "00000000-0000-0000-0000-000000000000"
 # alert_email        = ""
 # github_repo        = "m1ttt/editwar-sentinel"
 # create_github_identity = true
+
+# GitHub repositories with immutable OIDC subjects need the full prefix:
+#   gh api repos/m1ttt/editwar-sentinel/actions/oidc/customization/sub --jq .sub_claim_prefix
+# github_subject_prefix = "repo:<owner>@<owner-id>/<repo>@<repo-id>"

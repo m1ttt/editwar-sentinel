@@ -175,6 +175,12 @@ variable "create_github_identity" {
   default     = true
 }
 
+variable "github_subject_prefix" {
+  description = "Prefix of the subject that GitHub puts in the OIDC token. Repositories with immutable subjects use \"repo:<owner>@<owner-id>/<repo>@<repo-id>\". Read it with: gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix. Null means \"repo:<github_repo>\"."
+  type        = string
+  default     = null
+}
+
 variable "github_repo" {
   description = "GitHub repository in \"owner/name\" form that is allowed to log in to Azure with OIDC."
   type        = string
