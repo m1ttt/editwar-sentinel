@@ -10,10 +10,12 @@ locals {
   # Subjects that GitHub puts in the OIDC token.
   #   environment:dev / environment:prod -> jobs that use a GitHub Environment
   #   ref:refs/heads/main                -> jobs on the main branch without one
+  # Newer repositories use immutable ids in the prefix (see github_subject_prefix).
+  github_subject_prefix = coalesce(var.github_subject_prefix, "repo:${var.github_repo}")
   github_subjects = var.create_github_identity ? {
-    env-dev     = "repo:${var.github_repo}:environment:dev"
-    env-prod    = "repo:${var.github_repo}:environment:prod"
-    branch-main = "repo:${var.github_repo}:ref:refs/heads/main"
+    env-dev     = "${local.github_subject_prefix}:environment:dev"
+    env-prod    = "${local.github_subject_prefix}:environment:prod"
+    branch-main = "${local.github_subject_prefix}:ref:refs/heads/main"
   } : {}
 }
 
