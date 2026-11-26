@@ -1,6 +1,6 @@
 [project]
 name = "editwar-domain"
-version = "1.2.0"
+version = "1.3.0"
 description = "Shared domain model, topic names and settings for EditWar Sentinel."
 requires-python = ">=3.12"
 # opentelemetry-api: the metrics module. Without an SDK it is a no-op.
