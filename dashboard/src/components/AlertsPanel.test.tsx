@@ -39,6 +39,35 @@ describe('AlertsPanel', () => {
     expect(within(row('Apache Kafka')).getByText('(ana)')).toBeInTheDocument()
   })
 
+  it('shows the severity of the loaded alerts', async () => {
+    mockApi()
+    await renderPanel()
+    const legend = screen.getByRole('list', { name: 'Severidad de las 3 alertas cargadas' })
+    expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['alta 1', 'media 1', 'baja 1'])
+    expect(row('Kubernetes')).toHaveClass('sev-row-hi', 'status-open')
+    expect(row('Toda la wiki (dewiki)')).toHaveClass('sev-row-lo', 'status-dismissed')
+  })
+
+  it('shows unknown severity and status values as they come', async () => {
+    const odd = { ...makeAlert({ id: 'x', title: 'Rareza' }), severity: 'critical', status: 'archived' } as unknown as Alert
+    mockApi([odd])
+    render(<AlertsPanel lastAlert={null} />)
+    await screen.findByText('Rareza')
+    expect(within(row('Rareza')).getByText('critical')).toHaveClass('pill', 'lo')
+    expect(within(row('Rareza')).getByText('archived')).toBeInTheDocument()
+    expect(row('Rareza')).toHaveClass('sev-row-lo')
+  })
+
+  it('flashes the row of the alert that just arrived', async () => {
+    mockApi()
+    const { rerender } = render(<AlertsPanel lastAlert={null} />)
+    await screen.findByText('Kubernetes')
+    expect(row('Apache Kafka')).not.toHaveClass('row-new')
+    rerender(<AlertsPanel lastAlert={ackAlert} />)
+    await waitFor(() => expect(row('Apache Kafka')).toHaveClass('row-new'))
+    expect(row('Kubernetes')).not.toHaveClass('row-new')
+  })
+
   it('shows only the buttons that fit the alert status', async () => {
     mockApi()
     await renderPanel()

@@ -1,9 +1,10 @@
 // Pure state logic for the live feed. It has no WebSocket code, so the tests
 // call it directly with plain objects.
-import type { Alert, EditEvent, LiveMessage, RevertEvent, Stats } from '../types'
+import type { Alert, EditEvent, GeoEvent, LiveMessage, RevertEvent, Stats } from '../types'
 
 export const MAX_EDITS = 50
 export const MAX_POINTS = 60
+export const MAX_GEO = 200
 
 // A row of the live list. "reverted" becomes true when a revert message names it.
 // "delta" is the size change in bytes, or null when the size is not known.
@@ -17,16 +18,27 @@ export interface FeedState {
   throughput: number[]
   stats: Stats | null
   lastAlert: Alert | null
+  // Points of the map, newest first.
+  geo: GeoEvent[]
 }
+
+// The list from GET /api/geo/recent. It is not a WebSocket message: App dispatches it.
+export interface GeoSnapshotAction {
+  type: 'geo_snapshot'
+  data: GeoEvent[]
+}
+
+export type FeedAction = LiveMessage | GeoSnapshotAction
 
 export const initialFeedState: FeedState = {
   edits: [],
   throughput: [],
   stats: null,
   lastAlert: null,
+  geo: [],
 }
 
-const MESSAGE_TYPES = ['edit', 'revert', 'alert', 'stats']
+const MESSAGE_TYPES = ['edit', 'revert', 'alert', 'stats', 'geo']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -77,7 +89,28 @@ function prepend(edits: FeedEdit[], row: FeedEdit): FeedEdit[] {
   return [row, ...edits].slice(0, MAX_EDITS)
 }
 
-export function liveFeedReducer(state: FeedState, message: LiveMessage): FeedState {
+// The same point can come from the snapshot and from the WebSocket.
+export function geoKey(point: GeoEvent): string {
+  return `${point.kind}|${point.wiki}|${point.title}|${point.timestamp}`
+}
+
+function timeOf(point: GeoEvent): number {
+  const time = new Date(point.timestamp).getTime()
+  return Number.isNaN(time) ? 0 : time
+}
+
+// Joins two lists of points without duplicates, newest first, at most MAX_GEO.
+export function mergeGeo(current: GeoEvent[], incoming: GeoEvent[]): GeoEvent[] {
+  const byKey = new Map<string, GeoEvent>()
+  for (const point of [...incoming, ...current]) {
+    if (Number.isFinite(point.lat) && Number.isFinite(point.lon) && !byKey.has(geoKey(point))) {
+      byKey.set(geoKey(point), point)
+    }
+  }
+  return [...byKey.values()].sort((a, b) => timeOf(b) - timeOf(a)).slice(0, MAX_GEO)
+}
+
+export function liveFeedReducer(state: FeedState, message: FeedAction): FeedState {
   switch (message.type) {
     case 'edit': {
       const edit = message.data
@@ -111,6 +144,10 @@ export function liveFeedReducer(state: FeedState, message: LiveMessage): FeedSta
         stats: message.data,
         throughput: [...state.throughput, message.data.edits_per_second].slice(-MAX_POINTS),
       }
+    case 'geo':
+      return { ...state, geo: mergeGeo(state.geo, [message.data]) }
+    case 'geo_snapshot':
+      return { ...state, geo: mergeGeo(state.geo, message.data) }
     default:
       // Unknown message types do not change the state.
       return state

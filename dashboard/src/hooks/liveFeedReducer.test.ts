@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { makeAlert, makeEdit, makeStats } from '../test/fixtures'
+import { makeAlert, makeEdit, makeGeo, makeStats } from '../test/fixtures'
 import type { LiveMessage } from '../types'
-import { initialFeedState, liveFeedReducer, MAX_EDITS, MAX_POINTS, parseMessage, type FeedState } from './liveFeedReducer'
+import {
+  initialFeedState,
+  liveFeedReducer,
+  MAX_EDITS,
+  MAX_GEO,
+  MAX_POINTS,
+  mergeGeo,
+  parseMessage,
+  type FeedState,
+} from './liveFeedReducer'
 
 function applyAll(messages: LiveMessage[], state: FeedState = initialFeedState): FeedState {
   return messages.reduce(liveFeedReducer, state)
@@ -129,7 +138,61 @@ describe('liveFeedReducer', () => {
   })
 })
 
+describe('geo points', () => {
+  it('puts the newest geo message first', () => {
+    const state = applyAll([
+      { type: 'geo', data: makeGeo({ title: 'A', timestamp: '2026-11-25T21:00:00Z' }) },
+      { type: 'geo', data: makeGeo({ title: 'B', timestamp: '2026-11-25T21:00:05Z' }) },
+    ])
+    expect(state.geo.map((point) => point.title)).toEqual(['B', 'A'])
+  })
+
+  it('merges the snapshot from the api with the live points, without duplicates', () => {
+    const live = makeGeo({ title: 'Live', timestamp: '2026-11-25T21:00:10Z' })
+    const old = makeGeo({ title: 'Old', timestamp: '2026-11-25T20:59:00Z' })
+    const before = applyAll([{ type: 'geo', data: live }])
+    const state = liveFeedReducer(before, { type: 'geo_snapshot', data: [live, old] })
+    expect(state.geo.map((point) => point.title)).toEqual(['Live', 'Old'])
+  })
+
+  it('keeps a revert and an alert on the same article as two points', () => {
+    const revert = makeGeo()
+    const alert = makeGeo({ kind: 'alert', severity: 'high', alert_kind: 'revert_war' })
+    expect(applyAll([{ type: 'geo', data: revert }, { type: 'geo', data: alert }]).geo).toHaveLength(2)
+  })
+
+  it(`keeps at most ${MAX_GEO} points, the newest ones`, () => {
+    const points = Array.from({ length: MAX_GEO + 20 }, (_, index) =>
+      makeGeo({ title: `p${index}`, timestamp: new Date(Date.UTC(2026, 10, 25, 20, 0, index)).toISOString() }),
+    )
+    const state = liveFeedReducer(initialFeedState, { type: 'geo_snapshot', data: points })
+    expect(state.geo).toHaveLength(MAX_GEO)
+    expect(state.geo[0].title).toBe(`p${MAX_GEO + 19}`)
+  })
+
+  it('drops points without valid coordinates and sorts a bad timestamp last', () => {
+    const merged = mergeGeo(
+      [],
+      [
+        makeGeo({ title: 'no-time', timestamp: 'later' }),
+        makeGeo({ title: 'bad', lat: Number.NaN }),
+        makeGeo({ title: 'ok' }),
+      ],
+    )
+    expect(merged.map((point) => point.title)).toEqual(['ok', 'no-time'])
+  })
+})
+
 describe('parseMessage', () => {
+  it('parses a geo message', () => {
+    const geo = makeGeo()
+    expect(parseMessage(JSON.stringify({ type: 'geo', data: geo }))).toEqual({ type: 'geo', data: geo })
+  })
+
+  it('does not accept a snapshot from the WebSocket', () => {
+    expect(parseMessage(JSON.stringify({ type: 'geo_snapshot', data: {} }))).toBeNull()
+  })
+
   it('parses a valid message', () => {
     const edit = makeEdit()
     expect(parseMessage(JSON.stringify({ type: 'edit', data: edit }))).toEqual({ type: 'edit', data: edit })

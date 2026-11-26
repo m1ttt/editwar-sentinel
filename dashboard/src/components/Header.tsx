@@ -1,11 +1,10 @@
 import type { ConnectionStatus } from '../hooks/useLiveFeed'
-import { formatNumber } from '../lib/format'
-import type { Stats, VersionInfo } from '../types'
+import { useNow } from '../hooks/useNow'
+import type { VersionInfo } from '../types'
 
 interface HeaderProps {
   version: VersionInfo | null
   status: ConnectionStatus
-  stats: Stats | null
 }
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
@@ -25,20 +24,50 @@ export function environmentClass(environment: string): string {
   return KNOWN_ENVIRONMENTS.includes(name) ? `env-${name}` : 'env-other'
 }
 
-export function Header({ version, status, stats }: HeaderProps) {
-  const kpis = [
-    { label: 'Ediciones/s', value: stats ? stats.edits_per_second.toFixed(1) : '–' },
-    { label: 'Ediciones', value: stats ? formatNumber(stats.total_edits) : '–' },
-    { label: 'Reversiones', value: stats ? formatNumber(stats.total_reverts) : '–' },
-    { label: 'Alertas abiertas', value: stats ? formatNumber(stats.open_alerts) : '–' },
-  ]
+// Local time of the browser, "21:04:12".
+function Clock() {
+  const now = useNow()
+  return (
+    <time className="clock mono" dateTime={new Date(now).toISOString()}>
+      {new Date(now).toLocaleTimeString('es-MX', { hour12: false })}
+    </time>
+  )
+}
 
+function Logo() {
+  return (
+    <svg className="logo-mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+      <path d="M16 2 28 9v14l-12 7-12-7V9z" fill="none" stroke="currentColor" strokeWidth="2" />
+      <polyline
+        points="8,19 12,14 15,17 19,10 24,15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+export function Header({ version, status }: HeaderProps) {
   return (
     <header className="top">
       <div className="brand">
-        <span className="logo">
-          EditWar <span>Sentinel</span>
-        </span>
+        <Logo />
+        <div className="brand-text">
+          <span className="logo">
+            EditWar <span>Sentinel</span>
+          </span>
+          <span className="tagline">Consola de amenazas · Wikipedia</span>
+        </div>
+      </div>
+      <div className={`live live-${status}`} role="status">
+        <span className={`dot dot-${status}`} aria-hidden="true" />
+        {STATUS_LABELS[status]}
+      </div>
+      <div className="top-meta">
+        <Clock />
         {version ? (
           <span className="version">
             <span className="mono" data-testid="version">
@@ -55,18 +84,6 @@ export function Header({ version, status, stats }: HeaderProps) {
           <span className="version muted">versión no disponible</span>
         )}
       </div>
-      <div className="live" role="status">
-        <span className={`dot dot-${status}`} aria-hidden="true" />
-        {STATUS_LABELS[status]}
-      </div>
-      <dl className="kpis">
-        {kpis.map((kpi) => (
-          <div key={kpi.label}>
-            <dt>{kpi.label}</dt>
-            <dd>{kpi.value}</dd>
-          </div>
-        ))}
-      </dl>
     </header>
   )
 }
