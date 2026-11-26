@@ -1,6 +1,6 @@
 // All HTTP calls to the api. URLs are relative, so the same build works behind
 // the Vite dev proxy, behind nginx in Docker, and behind the Kubernetes ingress.
-import type { Alert, AlertStatus, Rule, RuleInput, RuleKind, Stats, VersionInfo } from '../types'
+import type { Alert, AlertStatus, GeoEvent, Rule, RuleInput, RuleKind, Stats, VersionInfo } from '../types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -141,4 +141,21 @@ export function dismissAlert(id: string): Promise<Alert> {
 
 export function deleteAlert(id: string): Promise<void> {
   return request<void>(`/api/alerts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+// ---- Map ----
+
+export const GEO_LIMIT = 200
+
+// Recent reverts and alerts with coordinates, newest first. The api keeps them in
+// memory. An api without this endpoint answers 404, which means "no points yet".
+export async function listRecentGeo(limit: number = GEO_LIMIT): Promise<GeoEvent[]> {
+  try {
+    return await request<GeoEvent[]>(`/api/geo/recent?limit=${limit}`)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return []
+    }
+    throw error
+  }
 }

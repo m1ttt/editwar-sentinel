@@ -2,12 +2,13 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { makeEdit, makeStats } from '../test/fixtures'
 import { DisputedPanel } from './DisputedPanel'
-import { LiveFeedPanel } from './LiveFeedPanel'
+import { eventTag, LiveFeedPanel } from './LiveFeedPanel'
+import { Panel } from './Panel'
 import { Sparkline, sparklinePoints } from './Sparkline'
 
 describe('LiveFeedPanel', () => {
   it('shows a waiting message without edits', () => {
-    render(<LiveFeedPanel edits={[]} throughput={[]} />)
+    render(<LiveFeedPanel edits={[]} />)
     expect(screen.getByText('Esperando ediciones…')).toBeInTheDocument()
   })
 
@@ -18,7 +19,7 @@ describe('LiveFeedPanel', () => {
       { ...makeEdit({ event_id: 'c', title: 'Nuevo', change_type: 'new' }), reverted: false, delta: 0 },
       { ...makeEdit({ event_id: 'd', title: 'Contenedor', change_type: 'revert' }), reverted: true, delta: null },
     ]
-    render(<LiveFeedPanel edits={edits} throughput={[1, 2]} />)
+    render(<LiveFeedPanel edits={edits} />)
 
     expect(screen.getByRole('link', { name: 'Docker (software)' })).toHaveAttribute(
       'href',
@@ -31,6 +32,23 @@ describe('LiveFeedPanel', () => {
     expect(screen.getByText('bot')).toBeInTheDocument()
     expect(screen.getAllByText('revert')).toHaveLength(2)
     expect(screen.getByText('nuevo')).toBeInTheDocument()
+    // The event type is an uppercase tag, so it does not clash with the lowercase pills.
+    expect(screen.getAllByText('EDIT')).toHaveLength(2)
+    expect(screen.getByText('NEW')).toBeInTheDocument()
+    expect(screen.getByText('REVERT')).toBeInTheDocument()
+    expect(screen.getAllByText('Editor_A', { selector: '.t-user' })).toHaveLength(4)
+  })
+
+  it('marks reverted rows', () => {
+    const { container } = render(
+      <LiveFeedPanel edits={[{ ...makeEdit({ event_id: 'r' }), reverted: true, delta: 3 }]} />,
+    )
+    expect(container.querySelector('.term-line')).toHaveClass('is-revert')
+  })
+
+  it('uses EDIT when the change type is empty', () => {
+    expect(eventTag({ change_type: '' })).toBe('EDIT')
+    expect(eventTag({ change_type: 'log' })).toBe('LOG')
   })
 })
 
@@ -68,5 +86,23 @@ describe('Sparkline', () => {
     const { container } = render(<Sparkline values={[]} />)
     expect(screen.getByText('–')).toBeInTheDocument()
     expect(container.querySelector('polyline')).toBeNull()
+  })
+})
+
+describe('Panel', () => {
+  it('names the section after its title and adds extra classes', () => {
+    render(
+      <Panel title="Prueba" aside="nota" className="area-x">
+        contenido
+      </Panel>,
+    )
+    const section = screen.getByRole('region', { name: 'Prueba' })
+    expect(section).toHaveClass('card', 'area-x')
+    expect(screen.getByText('nota')).toHaveClass('card-aside')
+  })
+
+  it('has only the card class without extra classes', () => {
+    render(<Panel title="Simple">contenido</Panel>)
+    expect(screen.getByRole('region', { name: 'Simple' }).className).toBe('card')
   })
 })
