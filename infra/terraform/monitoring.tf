@@ -22,9 +22,12 @@ resource "azurerm_log_analytics_workspace" "main" {
 # with the cluster selects. Without this rule the portal charts stay empty.
 # ---------------------------------------------------------------------------
 
+# Container stdout (Microsoft-ContainerLogV2) is not collected. It sent about
+# 0.6 GB per day, mostly from the dev api and detector, and filled the daily
+# cap, which also stops Application Insights. The services already send their
+# logs to Application Insights with OpenTelemetry.
 locals {
   container_insights_streams = [
-    "Microsoft-ContainerLogV2",
     "Microsoft-KubeEvents",
     "Microsoft-KubePodInventory",
     "Microsoft-KubeNodeInventory",
@@ -60,7 +63,7 @@ resource "azurerm_monitor_data_collection_rule" "container_insights" {
   }
 
   # The Container Insights extension collects the streams every minute,
-  # from all namespaces, with the ContainerLogV2 schema.
+  # from all namespaces.
   data_sources {
     extension {
       name           = "ContainerInsightsExtension"
