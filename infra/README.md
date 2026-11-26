@@ -29,7 +29,7 @@ Los manifiestos de Kubernetes de las aplicaciones están en `deploy/`. Los pipel
 | Recurso de Azure | Nombre | Propósito |
 |---|---|---|
 | Grupo de recursos | `rg-editwar-sentinel` | Contiene todos los recursos del proyecto. |
-| Azure Kubernetes Service | `aks-editwar-sentinel` | Un clúster para Dev y Prod. Plano de control en nivel Free, 2 nodos `Standard_B2s`, RBAC de Kubernetes, identidad administrada, Azure CNI Overlay. |
+| Azure Kubernetes Service | `aks-editwar-sentinel` | Un clúster para Dev y Prod. Plano de control en nivel Free, 1 nodo `Standard_D2as_v6` (2 vCPU, 8 GB), RBAC de Kubernetes, identidad administrada, Azure CNI Overlay. |
 | Complemento KEDA de AKS | (dentro de AKS) | Escala el detector según el lag de Kafka. |
 | Namespaces | `editwar-dev`, `editwar-prod` | Separan los dos ambientes dentro del clúster. |
 | Log Analytics workspace | `log-editwar-sentinel` | Guarda logs, métricas de Container Insights y datos de Application Insights. |
@@ -153,7 +153,7 @@ Terraform no estima el costo. Estos son los recursos que más gastan:
 - Ingesta en Log Analytics: cobra por GB ingerido. `log_daily_quota_gb` puede limitar la ingesta diaria. El valor por defecto es `-1`, sin límite. Con un límite, al llegar a él dejan de entrar los datos de Container Insights y de Application Insights hasta el día siguiente.
 - Discos administrados de los nodos y de los PVC de Kafka y PostgreSQL.
 
-Azure for Students puede restringir regiones y cuota de vCPU. Si `apply` falla por región o cuota, cambie `location` o `node_vm_size`. Dos nodos `Standard_B2s` tienen poca memoria para Kafka y PostgreSQL en los dos ambientes más los agentes de monitoreo. Si los pods quedan en `Pending`, suba `node_count` o use un tamaño de VM mayor.
+La cuenta gratuita de Azure da 4 vCPU por región y no permite la serie B en AKS. Por eso el valor por defecto es 1 nodo `Standard_D2as_v6` (2 vCPU, 8 GB): deja 2 vCPU libres para el nodo extra que AKS crea durante una actualización. Si `apply` falla por región o cuota, cambie `location` o `node_vm_size`. Si los pods quedan en `Pending`, suba `node_count` dentro de la cuota.
 
 ## Detener el gasto
 
