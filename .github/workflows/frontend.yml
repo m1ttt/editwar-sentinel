@@ -1,0 +1,226 @@
+# Frontend pipeline: quality -> unit tests -> build image -> deploy dev -> (approval) -> deploy prod.
+# It only changes the dashboard image. The backend pipeline owns every other object.
+name: frontend
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths: &frontend-paths
+      - dashboard/**
+      - .github/workflows/frontend.yml
+  push:
+    branches: [develop, main]
+    tags: ["v*.*.*"]
+    paths: *frontend-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_NAMESPACE: m1ttt
+  NODE_VERSION: "22"
+
+# Every npm command runs inside dashboard/.
+defaults:
+  run:
+    working-directory: dashboard
+
+jobs:
+  quality:
+    name: Calidad (eslint + tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  test:
+    name: Pruebas unitarias (dashboard)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      # Contract with dashboard/package.json: test:ci writes dashboard/reports/junit.xml and dashboard/coverage/.
+      - run: npm run test:ci
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-dashboard
+          path: |
+            dashboard/reports/junit.xml
+            dashboard/coverage/
+      - name: Publish test report
+        if: ${{ !cancelled() }}
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          check_name: Reporte de pruebas (dashboard)
+          files: dashboard/reports/junit.xml
+
+  build:
+    name: Build y push (dashboard)
+    needs: [quality, test]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_NAMESPACE }}/editwar-dashboard
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          flavor: |
+            latest=false
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: dashboard
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+
+  deploy-dev:
+    name: Deploy dev
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: http://${{ vars.DEV_HOST }}
+    # Same group as the backend deploy to dev.
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NAMESPACE: editwar-dev
+      HOST: ${{ vars.DEV_HOST }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AKS_CLUSTER_NAME }}
+      # Changes only the dashboard image. The backend pipeline must have deployed the stack once.
+      - name: Roll the dashboard image
+        id: roll
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          # First deploy: the backend pipeline has not created the stack yet. Skip without failing.
+          if ! kubectl -n "$NAMESPACE" get deployment dashboard >/dev/null 2>&1; then
+            echo "::notice::deployment/dashboard does not exist in $NAMESPACE yet. Run the backend pipeline first."
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          kubectl -n "$NAMESPACE" set image deployment/dashboard "dashboard=m1ttt/editwar-dashboard:$TAG"
+          kubectl -n "$NAMESPACE" rollout status deployment/dashboard --timeout=300s
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+      - name: Smoke test (dashboard answers 200)
+        if: steps.roll.outputs.deployed == 'true'
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 -o /dev/null "http://$HOST/"; then
+              echo "OK: http://$HOST/ answers"
+              exit 0
+            fi
+            echo "Attempt $i failed"
+            sleep 10
+          done
+          echo "::error::http://$HOST/ does not answer"
+          exit 1
+
+  deploy-prod:
+    name: Deploy prod
+    needs: deploy-dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Required reviewers on the "prod" environment make this job wait for approval.
+    environment:
+      name: prod
+      url: http://${{ vars.PROD_HOST }}
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NAMESPACE: editwar-prod
+      HOST: ${{ vars.PROD_HOST }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AKS_CLUSTER_NAME }}
+      - name: Roll the dashboard image
+        id: roll
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          # First deploy: the backend pipeline has not created the stack yet. Skip without failing.
+          if ! kubectl -n "$NAMESPACE" get deployment dashboard >/dev/null 2>&1; then
+            echo "::notice::deployment/dashboard does not exist in $NAMESPACE yet. Run the backend pipeline first."
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          kubectl -n "$NAMESPACE" set image deployment/dashboard "dashboard=m1ttt/editwar-dashboard:$TAG"
+          kubectl -n "$NAMESPACE" rollout status deployment/dashboard --timeout=300s
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+      - name: Smoke test (dashboard answers 200)
+        if: steps.roll.outputs.deployed == 'true'
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 -o /dev/null "http://$HOST/"; then
+              echo "OK: http://$HOST/ answers"
+              exit 0
+            fi
+            echo "Attempt $i failed"
+            sleep 10
+          done
+          echo "::error::http://$HOST/ does not answer"
+          exit 1
