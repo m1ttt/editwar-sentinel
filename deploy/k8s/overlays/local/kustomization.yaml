@@ -1,0 +1,62 @@
+# Local overlay for the k3d cluster "editwar". Open http://localhost:8088 after "make deploy".
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Every object goes to this namespace.
+namespace: editwar
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+# Images built by "make images" and copied into k3d by "make deploy" (k3d image import).
+images:
+  - name: m1ttt/editwar-ingestor
+    newTag: local
+  - name: m1ttt/editwar-detector
+    newTag: local
+  - name: m1ttt/editwar-api
+    newTag: local
+  - name: m1ttt/editwar-dashboard
+    newTag: local
+
+configMapGenerator:
+  # Adds or replaces keys in the base ConfigMap.
+  - name: editwar-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=local
+      - LOG_LEVEL=DEBUG
+      - SERVICE_VERSION=local
+      - ENABLE_DEBUG_ENDPOINTS=true
+
+secretGenerator:
+  # LOCAL ONLY. Throwaway credentials for the k3d cluster on a laptop.
+  # In dev and prod, Terraform creates this Secret. Those overlays never generate it.
+  - name: editwar-postgres
+    literals:
+      - POSTGRES_USER=editwar
+      - POSTGRES_PASSWORD=editwar-local-only
+      - POSTGRES_DB=editwar
+      - DATABASE_URL=postgresql+asyncpg://editwar:editwar-local-only@postgres:5432/editwar
+    options:
+      # Keep the fixed name "editwar-postgres", the same name Terraform uses in the cloud.
+      disableNameSuffixHash: true
+
+patches:
+  # k3s ships Traefik as its ingress controller.
+  - target:
+      kind: Ingress
+      name: editwar
+    patch: |-
+      - op: add
+        path: /spec/ingressClassName
+        value: traefik
+  # KEDA runs in the "keda" namespace and needs the full DNS name of the broker.
+  - target:
+      kind: ScaledObject
+      name: detector
+    patch: |-
+      - op: replace
+        path: /spec/triggers/0/metadata/bootstrapServers
+        value: kafka.editwar.svc.cluster.local:9092

@@ -1,0 +1,63 @@
+# One-shot Job that creates the three topics. It is idempotent (--if-not-exists).
+# A Job template is immutable, so this file uses no generated (hashed) names.
+# The pipeline and "make deploy" delete the old Job before every apply.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics
+  labels:
+    app: kafka-topics
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: kafka-topics
+    spec:
+      restartPolicy: OnFailure
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: create-topics
+          image: apache/kafka:3.9.0
+          env:
+            - name: BOOTSTRAP
+              value: kafka:9092
+            - name: KAFKA_HEAP_OPTS
+              value: -Xmx128m
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              BIN=/opt/kafka/bin/kafka-topics.sh
+              # Wait until the broker answers.
+              until "$BIN" --bootstrap-server "$BOOTSTRAP" --list >/dev/null 2>&1; do
+                echo "Waiting for Kafka at $BOOTSTRAP ..."
+                sleep 5
+              done
+              # topic:partitions. Retention 24 h = 86400000 ms.
+              for spec in wiki.edits:6 wiki.reverts:3 wiki.alerts:1; do
+                topic="${spec%%:*}"
+                partitions="${spec##*:}"
+                "$BIN" --bootstrap-server "$BOOTSTRAP" --create --if-not-exists \
+                  --topic "$topic" --partitions "$partitions" --replication-factor 1 \
+                  --config retention.ms=86400000
+              done
+              "$BIN" --bootstrap-server "$BOOTSTRAP" --describe
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

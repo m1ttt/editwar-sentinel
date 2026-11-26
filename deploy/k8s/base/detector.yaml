@@ -1,0 +1,105 @@
+# Detection engine. Consumes wiki.edits and scales with KEDA on consumer lag.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: detector
+  labels:
+    app: detector
+spec:
+  selector:
+    app: detector
+  ports:
+    - name: health
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detector
+  labels:
+    app: detector
+spec:
+  # No "replicas" field: the KEDA ScaledObject below owns the replica count.
+  selector:
+    matchLabels:
+      app: detector
+  template:
+    metadata:
+      labels:
+        app: detector
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001 # contract with services/detector/Dockerfile
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: detector
+          image: m1ttt/editwar-detector
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: editwar-config
+            - secretRef:
+                name: editwar-telemetry
+                optional: true
+          env:
+            # Must match "consumerGroup" in the ScaledObject.
+            - name: KAFKA_GROUP_ID
+              value: detector
+            - name: HEALTH_PORT
+              value: "8081"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# KEDA reads the lag of group "detector" on topic wiki.edits and sets the replica count.
+# Max 6 because wiki.edits has 6 partitions: a 7th consumer would get no partition.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: detector
+  labels:
+    app: detector
+spec:
+  scaleTargetRef:
+    name: detector
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  pollingInterval: 15 # seconds between lag checks
+  cooldownPeriod: 60
+  triggers:
+    - type: kafka
+      metadata:
+        # KEDA runs in another namespace, so each overlay patches this with the full DNS name.
+        bootstrapServers: kafka:9092
+        consumerGroup: detector
+        topic: wiki.edits
+        lagThreshold: "500" # target lag per replica
+        offsetResetPolicy: latest
