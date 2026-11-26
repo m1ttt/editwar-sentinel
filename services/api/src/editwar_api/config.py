@@ -11,6 +11,8 @@ editwar_domain.settings. Variables that only the api uses:
 - ENABLE_DEBUG_ENDPOINTS. Default: true. Enables /api/debug/error and /api/debug/log.
 - ALEMBIC_SCRIPT_LOCATION. Default: services/api/alembic in the source tree.
 - PORT. Default: 8000.
+- GEO_ENABLED. Default: true. Looks up article coordinates for the incident map.
+- GEO_MAX_POINTS. Default: 200. Points kept for GET /api/geo/recent.
 """
 
 from __future__ import annotations
@@ -54,6 +56,8 @@ class Settings:
     enable_debug_endpoints: bool
     alembic_script_location: str
     port: int
+    geo_enabled: bool = True
+    geo_max_points: int = 200
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -70,4 +74,6 @@ class Settings:
             enable_debug_endpoints=env_bool("ENABLE_DEBUG_ENDPOINTS", True),
             alembic_script_location=env("ALEMBIC_SCRIPT_LOCATION", DEFAULT_ALEMBIC_DIR),
             port=env_int("PORT", 8000),
+            geo_enabled=env_bool("GEO_ENABLED", True),
+            geo_max_points=env_int("GEO_MAX_POINTS", 200),
         )

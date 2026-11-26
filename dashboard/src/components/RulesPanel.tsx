@@ -71,13 +71,13 @@ export function RulesPanel({ refreshKey = 0 }: RulesPanelProps) {
   }
 
   const newRuleButton = (
-    <button className="link" onClick={() => setEditing('new')}>
+    <button className="btn ghost" onClick={() => setEditing('new')}>
       + Nueva regla
     </button>
   )
 
   return (
-    <Panel title="Reglas de detección" aside={newRuleButton}>
+    <Panel title="Reglas de detección" aside={newRuleButton} className="area-rules">
       {error && (
         <p className="error" role="alert">
           {error}
@@ -93,7 +93,7 @@ export function RulesPanel({ refreshKey = 0 }: RulesPanelProps) {
         />
       )}
       <div className="table-wrap">
-        <table>
+        <table className="rules">
           <thead>
             <tr>
               <th>Nombre</th>
@@ -114,9 +114,9 @@ export function RulesPanel({ refreshKey = 0 }: RulesPanelProps) {
             )}
             {rules.map((rule) => (
               <tr key={rule.id}>
-                <td>{rule.name}</td>
+                <td className="rule-name">{rule.name}</td>
                 <td className="mono">{rule.kind}</td>
-                <td>{rule.window_seconds} s</td>
+                <td className="mono">{rule.window_seconds} s</td>
                 <td>
                   {rule.threshold}
                   {rule.min_users > 1 && ` (≥${rule.min_users} usuarios)`}

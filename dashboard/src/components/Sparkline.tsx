@@ -2,6 +2,8 @@ interface SparklineProps {
   values: number[]
   width?: number
   height?: number
+  // Shows the last value next to the line.
+  showValue?: boolean
 }
 
 // Turns values into "x,y x,y ..." for an SVG polyline. The highest value
@@ -21,7 +23,7 @@ export function sparklinePoints(values: number[], width: number, height: number)
     .join(' ')
 }
 
-export function Sparkline({ values, width = 600, height = 48 }: SparklineProps) {
+export function Sparkline({ values, width = 600, height = 48, showValue = true }: SparklineProps) {
   const points = sparklinePoints(values, width, height)
   const last = values.at(-1)
   return (
@@ -34,9 +36,17 @@ export function Sparkline({ values, width = 600, height = 48 }: SparklineProps) 
         role="img"
         aria-label="Ediciones por segundo"
       >
-        {points && <polyline fill="none" stroke="var(--accent)" strokeWidth="2" points={points} />}
+        {points && (
+          <polyline
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+            points={points}
+          />
+        )}
       </svg>
-      <span className="spark-value">{last === undefined ? '–' : `${last.toFixed(1)} ed/s`}</span>
+      {showValue && <span className="spark-value">{last === undefined ? '–' : `${last.toFixed(1)} ed/s`}</span>}
     </div>
   )
 }

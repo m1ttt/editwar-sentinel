@@ -162,7 +162,7 @@ Los workflows usan filtros de rutas. Un PR que no toca el backend no ejecuta `ba
 
 ## Recursos en AKS
 
-Las peticiones (requests) están dimensionadas para 2 nodos Standard_B2s con los dos namespaces activos.
+Las peticiones (requests) están dimensionadas para 1 nodo Standard_D2as_v6 (2 vCPU, 8 GB) con los dos namespaces activos.
 
 | Namespace | CPU (requests) | Memoria (requests) |
 |---|---|---|

@@ -1,6 +1,6 @@
 // Sample objects with the same shape as the api JSON.
 import { vi } from 'vitest'
-import type { Alert, EditEvent, Rule, Stats } from '../types'
+import type { Alert, EditEvent, GeoEvent, Rule, Stats } from '../types'
 
 export function makeEdit(overrides: Partial<EditEvent> = {}): EditEvent {
   return {
@@ -64,6 +64,21 @@ export function makeStats(overrides: Partial<Stats> = {}): Stats {
       { wiki: 'eswiki', title: 'Contenedor', reverts: 7, page_url: 'https://es.wikipedia.org/wiki/Contenedor' },
     ],
     started_at: '2026-11-25T20:00:00+00:00',
+    ...overrides,
+  }
+}
+
+export function makeGeo(overrides: Partial<GeoEvent> = {}): GeoEvent {
+  return {
+    kind: 'revert',
+    wiki: 'enwiki',
+    title: 'Guadalajara',
+    lat: 20.67,
+    lon: -103.35,
+    page_url: 'https://en.wikipedia.org/wiki/Guadalajara',
+    timestamp: '2026-11-25T21:04:12+00:00',
+    severity: null,
+    alert_kind: null,
     ...overrides,
   }
 }

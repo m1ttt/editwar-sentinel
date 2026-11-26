@@ -26,7 +26,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -36,6 +36,7 @@ from editwar_api.config import Settings
 from editwar_api.consumers import AlertConsumer, LiveConsumer
 from editwar_api.controllers import AlertController, RuleController
 from editwar_api.db import make_engine, make_sessions, run_migrations
+from editwar_api.geo import GeoService
 from editwar_api.repositories import AlertRepository, RuleRepository
 from editwar_api.stats import StatsService
 from editwar_api.websocket import WebSocketHub
@@ -155,6 +156,22 @@ def debug_router(environment: str) -> APIRouter:
     return router
 
 
+def geo_router() -> APIRouter:
+    router = APIRouter(prefix="/api/geo", tags=["geo"])
+
+    @router.get("/recent")
+    async def recent_points(
+        request: Request, limit: int = Query(default=200, ge=1, le=1000)
+    ) -> list[dict[str, Any]]:
+        """Last reverts and alerts on articles with coordinates, newest first."""
+        geo: GeoService | None = request.app.state.geo
+        if geo is None:
+            return []
+        return [point.to_dict() for point in geo.recent(limit)]
+
+    return router
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     telemetry_active = configure_telemetry("api")
@@ -166,7 +183,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     hub = WebSocketHub(edits_per_second=settings.edit_sample_per_second)
     stats = StatsService(alerts)
     alert_consumer = AlertConsumer(alerts, hub)
-    live_consumer = LiveConsumer(stats, hub)
+    geo = GeoService(max_points=settings.geo_max_points) if settings.geo_enabled else None
+    live_consumer = LiveConsumer(stats, hub, geo)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -187,6 +205,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await live_consumer.drain()
+        if geo is not None:
+            await geo.close()
         await engine.dispose()
 
     app = FastAPI(title="EditWar Sentinel API", version=settings.service_version, lifespan=lifespan)
@@ -206,8 +227,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.stats = stats
     app.state.alert_consumer = alert_consumer
     app.state.live_consumer = live_consumer
+    app.state.geo = geo
 
     app.include_router(system_router(settings))
+    app.include_router(geo_router())
     app.include_router(RuleController(rules).router)
     app.include_router(AlertController(alerts).router)
     if settings.enable_debug_endpoints:
