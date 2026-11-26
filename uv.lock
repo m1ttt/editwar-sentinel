@@ -743,7 +743,7 @@ wheels = [
 
 [[package]]
 name = "editwar-api"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "services/api" }
 dependencies = [
     { name = "aiokafka" },
@@ -751,6 +751,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "editwar-domain", extra = ["telemetry"] },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -771,6 +772,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "editwar-domain", extras = ["telemetry"], editable = "libs/domain" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.27" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.48b0" },
@@ -781,7 +783,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "editwar-detector"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "services/detector" }
 dependencies = [
     { name = "aiokafka" },
@@ -798,7 +800,7 @@ requires-dist = [
 
 [[package]]
 name = "editwar-domain"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "libs/domain" }
 
 [package.optional-dependencies]
@@ -812,7 +814,7 @@ provides-extras = ["telemetry"]
 
 [[package]]
 name = "editwar-ingestor"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "services/ingestor" }
 dependencies = [
     { name = "aiokafka" },
@@ -831,7 +833,7 @@ requires-dist = [
 
 [[package]]
 name = "editwar-sentinel"
-version = "1.0.0"
+version = "1.1.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]

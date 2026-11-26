@@ -82,9 +82,25 @@ export interface Rule {
 // Body of POST /api/rules and PUT /api/rules/{id}: a rule without its id.
 export type RuleInput = Omit<Rule, 'id'>
 
+// A revert or an alert on an article that has coordinates on Wikipedia.
+// lat/lon are the location of the article topic, not of the editor.
+// From the "geo" WebSocket message and from GET /api/geo/recent.
+export interface GeoEvent {
+  kind: 'revert' | 'alert'
+  wiki: string
+  title: string
+  lat: number
+  lon: number
+  page_url: string
+  timestamp: string
+  severity: Severity | null
+  alert_kind: RuleKind | null
+}
+
 // One message from the WebSocket at /ws/live.
 export type LiveMessage =
   | { type: 'edit'; data: EditEvent }
   | { type: 'revert'; data: RevertEvent }
   | { type: 'alert'; data: Alert }
   | { type: 'stats'; data: Stats }
+  | { type: 'geo'; data: GeoEvent }

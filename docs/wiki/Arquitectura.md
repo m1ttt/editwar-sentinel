@@ -36,6 +36,7 @@ Diagramas de clases: [ingesta](https://github.com/m1ttt/editwar-sentinel/blob/ma
 - El detector lee las reglas de la api con `RuleProvider` (HTTP). Solo la api accede a PostgreSQL.
 - La api agrega `LiveConsumer`. Este consumidor no tiene grupo, así que cada réplica de la api recibe todas las ediciones, reversiones y alertas para su WebSocket. `AlertConsumer` usa el grupo compartido `api-alerts` y guarda cada alerta una sola vez.
 - `EventPublisher` tiene además `start()` y `close()`. `IngestorService` tiene además `handle(raw)`.
+- La api agrega `GeoService`. Pide a la API pública de Wikipedia las coordenadas de los artículos con reversión o alerta, y `LiveConsumer` envía un mensaje `geo` al mapa. La ubicación es la del tema del artículo, no la del editor: el stream de Wikimedia no trae la ubicación de quien edita.
 
 ### Patrones de diseño
 
@@ -52,7 +53,8 @@ Diagramas de clases: [ingesta](https://github.com/m1ttt/editwar-sentinel/blob/ma
 | `GET /api/alerts`, `GET/PATCH/DELETE /api/alerts/{id}` | Consultar, reconocer, descartar y eliminar alertas |
 | `GET /api/stats` | Ediciones por segundo, totales y artículos más disputados |
 | `GET /api/version` | Versión (`sha-<commit>`) y ambiente desplegados |
-| `WS /ws/live` | Mensajes `edit`, `revert`, `alert` y `stats` |
+| `GET /api/geo/recent` | Últimas reversiones y alertas en artículos con coordenadas, para el mapa |
+| `WS /ws/live` | Mensajes `edit`, `revert`, `alert`, `stats` y `geo` |
 | `GET /healthz`, `GET /readyz` | Probes de Kubernetes |
 | `GET /api/debug/error`, `GET /api/debug/log` | Demo de APM. Activos solo con `ENABLE_DEBUG_ENDPOINTS=true` (local y dev) |
 
@@ -79,7 +81,7 @@ Diagramas de clases: [ingesta](https://github.com/m1ttt/editwar-sentinel/blob/ma
 | Recurso | Propósito |
 |---|---|
 | Resource group | Agrupa todos los recursos del proyecto |
-| AKS (2 nodos `Standard_B2s`) | Corre los namespaces `editwar-dev` y `editwar-prod` con KEDA y Container Insights |
+| AKS (1 nodo `Standard_D2as_v6`, 2 vCPU y 8 GB) | Corre los namespaces `editwar-dev` y `editwar-prod` con KEDA y Container Insights |
 | IP pública estática e ingress-nginx | URL pública: `editwar.<ip>.nip.io` (prod) y `editwar-dev.<ip>.nip.io` (dev) |
 | Log Analytics workspace | Logs y métricas de contenedores (CPU, memoria) |
 | Application Insights (uno por ambiente) | Trazas, errores, requests y mensajes de log |
