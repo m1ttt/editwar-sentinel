@@ -110,16 +110,149 @@ variable "log_daily_quota_gb" {
   default     = -1
 }
 
+# ---------------------------------------------------------------------------
+# Alerts (alerts.tf)
+# ---------------------------------------------------------------------------
+
 variable "alert_email" {
-  description = "Optional email address for the failed-requests alert. Empty string means the action group has no receivers."
+  description = "Optional email addresses for Prod alerts, separated by commas. Empty string means the Prod action group has no receivers. The infra pipeline passes the ALERT_EMAIL repository variable, which is empty when unset."
   type        = string
   default     = ""
+
+  validation {
+    condition = alltrue([
+      for e in split(",", var.alert_email) :
+      can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", trimspace(e))) if trimspace(e) != ""
+    ])
+    error_message = "alert_email must be empty or a comma-separated list of email addresses."
+  }
 }
 
 variable "failed_requests_threshold" {
-  description = "The alert fires when an environment has more failed requests than this number in 5 minutes."
+  description = "The failed-requests alert fires when an environment has more failed requests than this number in 5 minutes."
   type        = number
   default     = 5
+
+  validation {
+    condition     = var.failed_requests_threshold >= 0
+    error_message = "failed_requests_threshold must be 0 or greater."
+  }
+}
+
+variable "availability_test_enabled" {
+  description = "Create the Prod availability web test and its alert. Each test execution is billed (about USD 0.0005)."
+  type        = bool
+  default     = true
+}
+
+variable "availability_test_frequency" {
+  description = "Seconds between availability test runs from each location (300, 600 or 900). Cost grows with runs per month."
+  type        = number
+  default     = 900
+
+  validation {
+    condition     = contains([300, 600, 900], var.availability_test_frequency)
+    error_message = "availability_test_frequency must be 300, 600 or 900."
+  }
+}
+
+variable "availability_test_locations" {
+  description = "Azure location IDs that run the availability test (2 to 5). Examples: us-va-ash-azr (East US), us-tx-sn1-azr (South Central US), us-il-ch1-azr (North Central US), us-ca-sjc-azr (West US)."
+  type        = list(string)
+  default     = ["us-va-ash-azr", "us-tx-sn1-azr"]
+
+  validation {
+    condition     = length(var.availability_test_locations) >= 2 && length(var.availability_test_locations) <= 5
+    error_message = "availability_test_locations must have between 2 and 5 locations."
+  }
+
+  validation {
+    condition     = alltrue([for l in var.availability_test_locations : can(regex("^(us|emea|apac|latam)-[a-z]{2}-[a-z0-9]{3}-(azr|edge)$", l))])
+    error_message = "Each location must be an Application Insights location ID such as us-va-ash-azr."
+  }
+}
+
+variable "availability_failed_locations" {
+  description = "The availability alert fires when at least this many locations fail. With the default 2 locations, both must fail, so one flaky location does not page."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.availability_failed_locations >= 1 && floor(var.availability_failed_locations) == var.availability_failed_locations
+    error_message = "availability_failed_locations must be a whole number of 1 or more."
+  }
+}
+
+variable "enable_dev_log_alerts" {
+  description = "Also create the log alerts (ingest stalled, detector lag, exceptions, pod restarts) for Dev. Each log alert rule is billed per month, so they are off by default."
+  type        = bool
+  default     = false
+}
+
+variable "ingest_stalled_evaluation_frequency" {
+  description = "How often the \"ingest stalled\" log alert runs (ISO 8601). It is the critical pipeline alert, so it runs more often than the others."
+  type        = string
+  default     = "PT5M"
+
+  validation {
+    condition     = contains(["PT5M", "PT10M", "PT15M"], var.ingest_stalled_evaluation_frequency)
+    error_message = "ingest_stalled_evaluation_frequency must be PT5M, PT10M or PT15M."
+  }
+}
+
+variable "ingest_stalled_window" {
+  description = "Time without published events that fires the \"ingest stalled\" alert (ISO 8601). 15 minutes leaves room for a rollout of the ingestor."
+  type        = string
+  default     = "PT15M"
+
+  validation {
+    condition     = contains(["PT10M", "PT15M", "PT30M"], var.ingest_stalled_window)
+    error_message = "ingest_stalled_window must be PT10M, PT15M or PT30M."
+  }
+}
+
+variable "log_alert_evaluation_frequency" {
+  description = "How often the detector-lag, exceptions and pod-restarts log alerts run (ISO 8601). Log alerts cost more at higher frequencies."
+  type        = string
+  default     = "PT15M"
+
+  validation {
+    condition     = contains(["PT5M", "PT10M", "PT15M"], var.log_alert_evaluation_frequency)
+    error_message = "log_alert_evaluation_frequency must be PT5M, PT10M or PT15M."
+  }
+}
+
+variable "detector_lag_threshold" {
+  description = "The detector-lag alert fires when the maximum consumer lag (messages) is above this number in two evaluations in a row."
+  type        = number
+  default     = 5000
+
+  validation {
+    condition     = var.detector_lag_threshold > 0
+    error_message = "detector_lag_threshold must be greater than 0."
+  }
+}
+
+variable "exceptions_threshold" {
+  description = "The exceptions alert fires when an environment records more exceptions than this number in one evaluation window (log_alert_evaluation_frequency)."
+  type        = number
+  default     = 15
+
+  validation {
+    condition     = var.exceptions_threshold >= 0
+    error_message = "exceptions_threshold must be 0 or greater."
+  }
+}
+
+variable "node_usage_threshold_percent" {
+  description = "The node CPU and memory alerts fire when the 15-minute average is above this percentage."
+  type        = number
+  default     = 85
+
+  validation {
+    condition     = var.node_usage_threshold_percent >= 50 && var.node_usage_threshold_percent <= 100
+    error_message = "node_usage_threshold_percent must be between 50 and 100."
+  }
 }
 
 # ---------------------------------------------------------------------------

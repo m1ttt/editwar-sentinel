@@ -13,7 +13,8 @@ Los manifiestos de Kubernetes de las aplicaciones están en `deploy/`. Los pipel
 | `terraform/variables.tf` | Variables de entrada con descripción y validación. `subscription_id` y `tenant_id` son obligatorias y no tienen valor por defecto. |
 | `terraform/main.tf` | Tags comunes, nombres de namespaces, grupo de recursos y sufijo aleatorio del DNS. |
 | `terraform/aks.tf` | Clúster AKS y los namespaces `editwar-dev` y `editwar-prod`. |
-| `terraform/monitoring.tf` | Log Analytics, regla de recolección de Container Insights, Application Insights por ambiente, Secrets `editwar-telemetry` y `editwar-postgres`, grupo de acciones y alertas. |
+| `terraform/monitoring.tf` | Log Analytics, regla de recolección de Container Insights, Application Insights por ambiente y Secrets `editwar-telemetry` y `editwar-postgres`. |
+| `terraform/alerts.tf` | Grupos de acciones, prueba de disponibilidad de Prod, alertas de logs del pipeline de datos y alertas de métricas (requests fallidos, nodo de AKS). Ver [Alertas](#alertas). |
 | `terraform/ingress.tf` | IP pública estática e ingress-nginx con Helm. |
 | `terraform/identity.tf` | App registration, service principal y credenciales federadas para GitHub Actions. Rol de usuario del clúster. |
 | `terraform/outputs.tf` | URLs públicas y valores para las variables del repositorio en GitHub. |
@@ -39,8 +40,9 @@ Los manifiestos de Kubernetes de las aplicaciones están en `deploy/`. Los pipel
 | Secret de Kubernetes | `editwar-postgres` (por namespace) | Guarda `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` y `DATABASE_URL`. La contraseña es aleatoria por ambiente. |
 | IP pública estática (Standard) | `pip-editwar-sentinel-ingress` | Dirección fija del ingress. Está en el grupo de nodos `MC_...` que administra AKS. |
 | ingress-nginx (Helm) | namespace `ingress-nginx` | Controlador de Ingress con clase `nginx`. Su Service LoadBalancer usa la IP estática. |
-| Grupo de acciones | `ag-editwar-sentinel` | Destino de las alertas. No tiene receptores, salvo que se defina `alert_email`. |
-| Alertas de métricas | `alert-failed-requests-dev`, `alert-failed-requests-prod` | Se disparan con más de 5 requests fallidos en 5 minutos. |
+| Grupos de acciones | `ag-editwar-sentinel` (Prod), `ag-editwar-sentinel-dev` | Destino de las alertas. El de Prod envía correo a `alert_email`. El de Dev no tiene receptores. |
+| Prueba de disponibilidad | `webtest-editwar-sentinel-prod` | `GET /api/version` de Prod desde 2 ubicaciones cada 15 minutos. |
+| Alertas | `alert-*` | Disponibilidad, pipeline de datos y clúster. Ver [Alertas](#alertas). |
 | App registration de Entra ID | `github-editwar-sentinel` | Identidad de GitHub Actions con federación OIDC. No tiene secretos. |
 | Asignación de rol | Azure Kubernetes Service Cluster User Role | Permite al pipeline obtener el kubeconfig y ejecutar `kubectl apply`. No permite cambiar recursos de Azure. |
 
@@ -141,7 +143,70 @@ Cree también los Environments `dev` y `prod`. En `prod`, agregue un revisor obl
 - Requests, fallos y tiempos de respuesta: Application Insights > Performance y Failures.
 - Trazas distribuidas: Application Insights > Transaction search.
 - Mensajes de log: Application Insights > Logs, tabla `traces`.
-- Alertas: Monitor > Alerts.
+- Alertas: Monitor > Alerts. Detalle en [Alertas](#alertas).
+
+## Alertas
+
+Las reglas están en `terraform/alerts.tf`. Cada descripción enlaza a su sección en [docs/wiki/Runbooks.md](../docs/wiki/Runbooks.md), con qué significa, cómo confirmarla, causas, mitigación y cuándo escalar.
+
+| Alerta | Tipo y alcance | Condición (valores por defecto) | Sev Prod | Sev Dev | Grupo |
+|---|---|---|---|---|---|
+| `alert-availability-prod` | Métrica sobre la prueba `webtest-editwar-sentinel-prod` | `GET http://<prod_host>/api/version` cada 900 s desde `us-va-ash-azr` y `us-tx-sn1-azr`, timeout 30 s, espera 200 y el texto `"environment":"prod"`. Se dispara si fallan 2 ubicaciones o más. | 0 | (no existe) | Prod |
+| `alert-ingest-stalled-<env>` | Logs, Application Insights (`customMetrics`) | Suma de `editwar.ingestor.events` con `outcome=published` menor que 1 en 15 min. También se dispara si no llega ninguna fila. Evalúa cada 5 min. | 1 | 3 | Prod / Dev |
+| `alert-detector-lag-<env>` | Logs, Application Insights (`customMetrics`) | Máximo de `editwar.detector.consumer_lag` mayor que 5000 en 2 de 2 periodos de 15 min. | 2 | 3 | Prod / Dev |
+| `alert-exceptions-<env>` | Logs, Application Insights (`exceptions`) | Más de 15 excepciones en 15 min. | 2 | 3 | Prod / Dev |
+| `alert-pod-restarts-<env>` | Logs, Log Analytics (`KubePodInventory`) | `ContainerRestartCount` de algún contenedor de `editwar-<env>` creció (máx - mín > 0) en 30 min. Evalúa cada 15 min. | 2 | 3 | Prod / Dev |
+| `alert-failed-requests-<env>` | Métrica `requests/failed` de Application Insights | Más de 5 requests fallidos en 5 min. | 1 | 3 | Prod / Dev |
+| `alert-node-cpu`, `alert-node-memory` | Métrica de plataforma del clúster AKS | `node_cpu_usage_percentage` o `node_memory_working_set_percentage` mayor que 85 % en promedio de 15 min. | 2 (clúster) | | Prod |
+
+- Las alertas de logs se crean solo para Prod. Con `enable_dev_log_alerts = true` se crean también las de Dev (Sev 3, sin correo). Dev siempre tiene `alert-failed-requests-dev`.
+- Las alertas de logs usan `auto_mitigation_enabled`: se resuelven solas cuando la condición deja de cumplirse.
+- La ventana de 15 minutos de "Ingesta detenida" deja pasar un despliegue del ingestor sin disparar. En un ambiente recién creado puede dispararse hasta que llega la primera exportación de métricas.
+- Umbrales, frecuencias y ubicaciones son variables con validación en `variables.tf` (`detector_lag_threshold`, `exceptions_threshold`, `node_usage_threshold_percent`, `ingest_stalled_window`, `ingest_stalled_evaluation_frequency`, `log_alert_evaluation_frequency`, `availability_test_*`).
+
+### Correo de las alertas de Prod
+
+El grupo `ag-editwar-sentinel` envía correo a las direcciones de `alert_email` (separadas por comas). Sin dirección, el grupo no tiene receptores y las alertas solo se ven en el portal.
+
+El pipeline `infra.yml` pasa la variable del repositorio `ALERT_EMAIL` como `TF_VAR_alert_email` en `plan` y `apply`. Para configurarla:
+
+1. GitHub > Settings > Secrets and variables > Actions > Variables > New repository variable.
+2. Nombre `ALERT_EMAIL`, valor `equipo@ejemplo.com` (o varias direcciones separadas por comas).
+3. Ejecute `infra.yml` con `apply`. Azure envía un correo de confirmación a cada dirección nueva.
+
+Si la variable no existe, GitHub pasa una cadena vacía y Terraform no crea receptores. En una ejecución local, use `alert_email` en `terraform.tfvars`.
+
+### Probar una alerta en Dev
+
+`/api/debug/error` solo está activo en Dev (`ENABLE_DEBUG_ENDPOINTS=true` en `deploy/k8s/overlays/dev`). Cada llamada responde 500 y registra una excepción.
+
+```bash
+cd infra/terraform
+DEV_URL=$(terraform output -raw dev_url)
+for i in $(seq 1 10); do curl -s -o /dev/null -w '%{http_code}\n' "$DEV_URL/api/debug/error"; done
+```
+
+- Entre 1 y 5 minutos después, `alert-failed-requests-dev` aparece en Monitor > Alerts (Sev 3, sin correo) y se resuelve sola unos minutos después.
+- Con `enable_dev_log_alerts = true`, 20 llamadas en 15 minutos disparan también `alert-exceptions-dev`.
+- "Ingesta detenida" se puede probar en Dev con `kubectl -n editwar-dev scale deploy/ingestor --replicas=0` (y `--replicas=1` al terminar), solo con `enable_dev_log_alerts = true`.
+
+No pruebe en Prod: allí las alertas envían correo y `/api/debug/error` está desactivado.
+
+### Costo estimado
+
+Precios unitarios de la región `eastus2` consultados en prices.azure.com el 2026-11-26. Pueden cambiar; revíselos antes de cambiar frecuencias o agregar reglas.
+
+| Concepto | Precio unitario | Cantidad con los valores por defecto | USD al mes |
+|---|---|---|---|
+| Prueba estándar de disponibilidad | USD 0.0005 por ejecución | 2 ubicaciones × 96 ejecuciones al día × 30 días = 5 760 | 2.88 |
+| Alerta de logs cada 5 min | USD 1.50 al mes | 1 (ingesta detenida, Prod) | 1.50 |
+| Alerta de logs cada 15 min | USD 0.50 al mes | 3 (detector, excepciones, reinicios; Prod) | 1.50 |
+| Alerta de métricas | USD 0.10 al mes por señal (aprox.) | 5 (failed requests Dev y Prod, disponibilidad, CPU, memoria) | 0.50 |
+| **Total** | | | **≈ 6.38** |
+
+- Con `enable_dev_log_alerts = true` se suman USD 3.00 al mes (las mismas 4 alertas de logs para Dev).
+- Una alerta de logs cada 10 min cuesta USD 1.00 al mes. Con `availability_test_frequency = 300` la prueba cuesta el triple.
+- No incluye la ingesta de datos en Log Analytics ni las notificaciones.
 
 ## Costo
 
