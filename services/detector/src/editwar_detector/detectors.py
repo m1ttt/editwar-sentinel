@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any, ClassVar
 
 from editwar_detector.window import SlidingWindow, article_key, wiki_key
-from editwar_domain import Alert, DetectionRule, EditEvent, RuleKind, Severity
+from editwar_domain import Alert, DetectionRule, EditEvent, RevertEvent, RuleKind, Severity
 
 # Which window store a detector reads.
 SCOPE_ARTICLE = "article"
@@ -15,6 +15,45 @@ SCOPE_WIKI = "wiki"
 
 # Evidence lists are capped so one alert stays small.
 MAX_EVIDENCE_ITEMS = 10
+# The timeline of an article alert keeps at most this many edits (the newest).
+MAX_TIMELINE_ITEMS = 25
+
+
+def timeline_entry(edit: EditEvent, revert: RevertEvent | None) -> dict[str, Any]:
+    """One edit of an alert timeline, in the JSON shape the dashboard reads."""
+    return {
+        "event_id": edit.event_id,
+        "user": edit.user,
+        "is_bot": edit.is_bot,
+        "timestamp": edit.timestamp.isoformat(),
+        "comment": edit.comment,
+        "rev_id": edit.rev_id,
+        "old_rev_id": edit.old_rev_id,
+        "old_len": edit.old_len,
+        "new_len": edit.new_len,
+        "size_delta": edit.size_delta(),
+        "is_revert": revert is not None,
+        "revert_reason": None if revert is None else revert.reason,
+        "reverted_user": None if revert is None else revert.reverted_user,
+        "diff_url": edit.diff_url(),
+    }
+
+
+def timeline_evidence(window: SlidingWindow, since: datetime) -> dict[str, Any]:
+    """The "timeline" and "timeline_truncated" evidence of an article alert.
+
+    The newest MAX_TIMELINE_ITEMS edits since `since`, oldest first. Each edit
+    is marked as a revert when the window has a RevertEvent with its event_id.
+    """
+    edits = window.recent(since)
+    reverts = {revert.event_id: revert for revert in window.recent_reverts(since)}
+    # recent() is newest first; reverse it so edits with the same timestamp
+    # keep their arrival order, then sort for windows that arrive out of order.
+    kept = sorted(reversed(edits[:MAX_TIMELINE_ITEMS]), key=lambda edit: edit.timestamp)
+    return {
+        "timeline": [timeline_entry(edit, reverts.get(edit.event_id)) for edit in kept],
+        "timeline_truncated": len(edits) > MAX_TIMELINE_ITEMS,
+    }
 
 
 class Detector(ABC):
@@ -116,6 +155,7 @@ class RevertWarDetector(Detector):
                 "distinct_users": len(reverters),
                 "users": reverters[:MAX_EVIDENCE_ITEMS],
                 "event_ids": [revert.event_id for revert in recent],
+                **timeline_evidence(window, since),
             },
         )
 
@@ -146,6 +186,7 @@ class BurstDetector(Detector):
                 "distinct_users": len(users),
                 "users": users[:MAX_EVIDENCE_ITEMS],
                 "event_ids": [edit.event_id for edit in recent],
+                **timeline_evidence(window, since),
             },
         )
 

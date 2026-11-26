@@ -1,13 +1,26 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { emptyResponse, fetchCalls, jsonResponse, makeAlert, mockFetch } from '../test/fixtures'
+import { emptyResponse, fetchCalls, jsonResponse, makeAlert, makeTimeline, mockFetch } from '../test/fixtures'
 import type { Alert } from '../types'
 import { AlertsPanel } from './AlertsPanel'
 
 const openAlert = makeAlert({ id: 'a1', title: 'Kubernetes', status: 'open' })
-const ackAlert = makeAlert({ id: 'a2', title: 'Apache Kafka', status: 'acknowledged', acknowledged_by: 'ana', severity: 'medium' })
-const dismissedAlert = makeAlert({ id: 'a3', title: '*', wiki: 'dewiki', status: 'dismissed', kind: 'bot_spike', severity: 'low' })
+const ackAlert = makeAlert({
+  id: 'a2',
+  title: 'Apache Kafka',
+  status: 'acknowledged',
+  acknowledged_by: 'ana',
+  severity: 'medium',
+})
+const dismissedAlert = makeAlert({
+  id: 'a3',
+  title: '*',
+  wiki: 'dewiki',
+  status: 'dismissed',
+  kind: 'bot_spike',
+  severity: 'low',
+})
 
 // The api answers GET with the list, PATCH with the alert and DELETE with 204.
 function mockApi(alerts: Alert[] = [openAlert, ackAlert, dismissedAlert]) {
@@ -43,13 +56,21 @@ describe('AlertsPanel', () => {
     mockApi()
     await renderPanel()
     const legend = screen.getByRole('list', { name: 'Severidad de las 3 alertas cargadas' })
-    expect(within(legend).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['alta 1', 'media 1', 'baja 1'])
+    expect(
+      within(legend)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['alta 1', 'media 1', 'baja 1'])
     expect(row('Kubernetes')).toHaveClass('sev-row-hi', 'status-open')
     expect(row('Toda la wiki (dewiki)')).toHaveClass('sev-row-lo', 'status-dismissed')
   })
 
   it('shows unknown severity and status values as they come', async () => {
-    const odd = { ...makeAlert({ id: 'x', title: 'Rareza' }), severity: 'critical', status: 'archived' } as unknown as Alert
+    const odd = {
+      ...makeAlert({ id: 'x', title: 'Rareza' }),
+      severity: 'critical',
+      status: 'archived',
+    } as unknown as Alert
     mockApi([odd])
     render(<AlertsPanel lastAlert={null} />)
     await screen.findByText('Rareza')
@@ -71,9 +92,21 @@ describe('AlertsPanel', () => {
   it('shows only the buttons that fit the alert status', async () => {
     mockApi()
     await renderPanel()
-    expect(within(row('Kubernetes')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Reconocer', 'Descartar', 'Eliminar'])
-    expect(within(row('Apache Kafka')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Descartar', 'Eliminar'])
-    expect(within(row('Toda la wiki (dewiki)')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Eliminar'])
+    expect(
+      within(row('Kubernetes'))
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Reconocer', 'Descartar', 'Eliminar'])
+    expect(
+      within(row('Apache Kafka'))
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Descartar', 'Eliminar'])
+    expect(
+      within(row('Toda la wiki (dewiki)'))
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Eliminar'])
   })
 
   it('acknowledges with the operator name', async () => {
@@ -85,7 +118,11 @@ describe('AlertsPanel', () => {
     await user.type(operator, 'maria')
     await user.click(within(row('Kubernetes')).getByRole('button', { name: 'Reconocer' }))
     await waitFor(() =>
-      expect(fetchCalls(fetchMock)).toContainEqual(['PATCH', '/api/alerts/a1', { status: 'acknowledged', user: 'maria' }]),
+      expect(fetchCalls(fetchMock)).toContainEqual([
+        'PATCH',
+        '/api/alerts/a1',
+        { status: 'acknowledged', user: 'maria' },
+      ]),
     )
     // The list reloads after the action.
     await waitFor(() => expect(fetchCalls(fetchMock).filter(([method]) => method === 'GET')).toHaveLength(2))
@@ -102,7 +139,9 @@ describe('AlertsPanel', () => {
     const fetchMock = mockApi()
     await renderPanel()
     await userEvent.click(within(row('Apache Kafka')).getByRole('button', { name: 'Descartar' }))
-    await waitFor(() => expect(fetchCalls(fetchMock)).toContainEqual(['PATCH', '/api/alerts/a2', { status: 'dismissed' }]))
+    await waitFor(() =>
+      expect(fetchCalls(fetchMock)).toContainEqual(['PATCH', '/api/alerts/a2', { status: 'dismissed' }]),
+    )
   })
 
   it('deletes an alert after confirmation', async () => {
@@ -125,7 +164,9 @@ describe('AlertsPanel', () => {
     const fetchMock = mockApi()
     await renderPanel()
     await userEvent.selectOptions(screen.getByLabelText('Estado'), 'acknowledged')
-    await waitFor(() => expect(fetchCalls(fetchMock).at(-1)).toEqual(['GET', '/api/alerts?status=acknowledged&limit=50', undefined]))
+    await waitFor(() =>
+      expect(fetchCalls(fetchMock).at(-1)).toEqual(['GET', '/api/alerts?status=acknowledged&limit=50', undefined]),
+    )
   })
 
   it('reloads when a new alert arrives from the WebSocket', async () => {
@@ -145,7 +186,9 @@ describe('AlertsPanel', () => {
   })
 
   it('shows api errors', async () => {
-    mockFetch((method) => (method === 'GET' ? jsonResponse([openAlert]) : jsonResponse({ detail: 'Alert not found' }, 404)))
+    mockFetch((method) =>
+      method === 'GET' ? jsonResponse([openAlert]) : jsonResponse({ detail: 'Alert not found' }, 404),
+    )
     await renderPanel()
     await userEvent.click(within(row('Kubernetes')).getByRole('button', { name: 'Descartar' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Alert not found')
@@ -156,5 +199,54 @@ describe('AlertsPanel', () => {
     render(<AlertsPanel lastAlert={null} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 502')
     expect(screen.getByText('No hay alertas.')).toBeInTheDocument()
+  })
+
+  it('links to the article history, except for wiki-wide alerts', async () => {
+    const withHistory = makeAlert({ id: 'h', title: 'Docker', history_url: 'https://en.wikipedia.org/h' })
+    mockApi([openAlert, withHistory, dismissedAlert])
+    await renderPanel()
+    expect(within(row('Kubernetes')).getByRole('link', { name: 'historial ↗' })).toHaveAttribute(
+      'href',
+      'https://en.wikipedia.org/w/index.php?title=Kubernetes&action=history',
+    )
+    expect(within(row('Docker')).getByRole('link', { name: 'historial ↗' })).toHaveAttribute(
+      'href',
+      'https://en.wikipedia.org/h',
+    )
+    expect(within(row('Toda la wiki (dewiki)')).queryByRole('link', { name: 'historial ↗' })).toBeNull()
+  })
+
+  it('shows the fight toggle only for alerts with a timeline', async () => {
+    const war = makeAlert({
+      id: 'w',
+      title: 'Guerra',
+      evidence: { reverts: 2, timeline: makeTimeline(), timeline_truncated: true },
+    })
+    mockApi([openAlert, war])
+    await renderPanel()
+    expect(within(row('Kubernetes')).queryByRole('button', { name: /Ver pelea/ })).toBeNull()
+    // The timeline is not part of the short evidence text.
+    expect(within(row('Guerra')).getByText('reverts: 2')).toBeInTheDocument()
+
+    const toggle = within(row('Guerra')).getByRole('button', { name: /Ver pelea \(4 ediciones\)/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('list', { name: 'Participantes' })).toBeNull()
+
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const region = document.getElementById(toggle.getAttribute('aria-controls') as string) as HTMLElement
+    expect(within(region).getByRole('list', { name: 'Participantes' })).toBeInTheDocument()
+    expect(within(region).getByText(/Solo se muestran/)).toBeInTheDocument()
+
+    await userEvent.click(toggle)
+    expect(screen.queryByRole('list', { name: 'Participantes' })).toBeNull()
+  })
+
+  it('uses the singular for a timeline of one edit', async () => {
+    const war = makeAlert({ id: 'w', title: 'Guerra', evidence: { timeline: makeTimeline().slice(0, 1) } })
+    mockApi([war])
+    render(<AlertsPanel lastAlert={null} />)
+    await screen.findByText('Guerra')
+    expect(screen.getByRole('button', { name: /Ver pelea \(1 edición\)/ })).toBeInTheDocument()
   })
 })

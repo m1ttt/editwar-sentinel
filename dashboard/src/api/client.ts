@@ -1,6 +1,6 @@
 // All HTTP calls to the api. URLs are relative, so the same build works behind
 // the Vite dev proxy, behind nginx in Docker, and behind the Kubernetes ingress.
-import type { Alert, AlertStatus, GeoEvent, Rule, RuleInput, RuleKind, Stats, VersionInfo } from '../types'
+import type { Alert, AlertStatus, DiffResult, GeoEvent, Rule, RuleInput, RuleKind, Stats, VersionInfo } from '../types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -158,4 +158,14 @@ export async function listRecentGeo(limit: number = GEO_LIMIT): Promise<GeoEvent
     }
     throw error
   }
+}
+
+// ---- Diffs ----
+
+// The text change between two revisions of an article, as MediaWiki diff rows.
+// The api answers 422 when oldRevId is 0 (the edit created the page), 404 when
+// the revision does not exist and 502 when Wikipedia fails.
+export function fetchDiff(serverUrl: string, revId: number, oldRevId: number): Promise<DiffResult> {
+  const params = new URLSearchParams({ server_url: serverUrl, rev_id: String(revId), old_rev_id: String(oldRevId) })
+  return request<DiffResult>(`/api/diff?${params.toString()}`)
 }

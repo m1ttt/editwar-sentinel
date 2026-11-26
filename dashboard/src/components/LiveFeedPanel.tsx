@@ -47,6 +47,11 @@ export function LiveFeedPanel({ edits }: LiveFeedPanelProps) {
                     {edit.title}
                   </a>
                   <span className="t-user">{edit.user}</span>
+                  {edit.diff_url && edit.old_rev_id > 0 && (
+                    <a className="t-diff ext-link" href={edit.diff_url} target="_blank" rel="noreferrer">
+                      diff ↗
+                    </a>
+                  )}
                 </span>
               </li>
             ))}

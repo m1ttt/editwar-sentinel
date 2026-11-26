@@ -184,3 +184,31 @@ def test_prune_frees_windows_and_cooldowns(make_event, clock):
 
 def test_unknown_rule_id_unregister():
     assert DetectionEngine().unregister(uuid.uuid4()) is False
+
+
+def test_revert_carries_reverted_user_into_window_and_timeline(make_event, clock):
+    engine = DetectionEngine()
+    engine.register(RevertWarDetector(rule(RuleKind.REVERT_WAR, threshold=2, min_users=2)))
+    engine.process(make_event(user="Vandal", old_len=100, new_len=900, comment="spam"))
+    clock.advance(5)
+    first = engine.process(make_event(user="A", old_len=900, new_len=100, comment=""))
+    assert first.revert is not None
+    assert first.revert.reason == "size_restore"
+    assert first.revert.reverted_user == "Vandal"
+    window = engine.articles.get(first.revert.partition_key())
+    assert window.reverts[-1] is first.revert  # the window holds the same object
+
+    clock.advance(5)
+    second = engine.process(make_event(user="B", comment="Undid revision 3 by A (talk)"))
+    assert second.revert is not None
+    assert second.revert.reverted_user == "A"
+    [alert] = second.alerts
+    timeline = alert.evidence["timeline"]
+    assert [entry["user"] for entry in timeline] == ["Vandal", "A", "B"]
+    assert [entry["is_revert"] for entry in timeline] == [False, True, True]
+    assert [entry["reverted_user"] for entry in timeline] == [None, "Vandal", "A"]
+    assert [entry["event_id"] for entry in timeline][1:] == [
+        first.revert.event_id,
+        second.revert.event_id,
+    ]
+    assert alert.evidence["timeline_truncated"] is False

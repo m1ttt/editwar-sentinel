@@ -27,6 +27,7 @@ from editwar_api.repositories import AlertRepository
 from editwar_api.stats import StatsService, page_url
 from editwar_api.websocket import WebSocketHub
 from editwar_domain import TOPIC_ALERTS, TOPIC_EDITS, TOPIC_REVERTS, Alert, EditEvent, RevertEvent
+from editwar_domain.events import history_url
 
 logger = logging.getLogger("editwar.api")
 tracer = trace.get_tracer("editwar.api")
@@ -186,12 +187,19 @@ class LiveConsumer:
         if message.topic == TOPIC_EDITS:
             edit = EditEvent.from_json(message.value)
             self._stats.record_edit(edit)
-            data = edit.to_dict() | {"page_url": edit.page_url(), "diff_url": edit.diff_url()}
+            data = edit.to_dict() | {
+                "page_url": edit.page_url(),
+                "diff_url": edit.diff_url(),
+                "history_url": edit.history_url(),
+            }
             await self._hub.broadcast_edit(data)
         elif message.topic == TOPIC_REVERTS:
             revert = RevertEvent.from_json(message.value)
             self._stats.record_revert(revert)
-            data = revert.to_dict() | {"page_url": page_url(revert.server_url, revert.title)}
+            data = revert.to_dict() | {
+                "page_url": page_url(revert.server_url, revert.title),
+                "history_url": history_url(revert.server_url, revert.title),
+            }
             await self._hub.broadcast({"type": "revert", "data": data})
             self._locate_later(
                 "revert", revert.server_url, revert.wiki, revert.title, data["timestamp"]

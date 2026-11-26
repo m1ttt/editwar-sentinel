@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { ruleToInput } from '../lib/ruleValidation'
-import { emptyResponse, fetchCalls, jsonResponse, makeAlert, makeGeo, makeRule, makeStats, mockFetch } from '../test/fixtures'
+import {
+  emptyResponse,
+  fetchCalls,
+  jsonResponse,
+  makeAlert,
+  makeDiff,
+  makeGeo,
+  makeRule,
+  makeStats,
+  mockFetch,
+} from '../test/fixtures'
 import {
   acknowledgeAlert,
   alertsQuery,
@@ -10,6 +20,7 @@ import {
   deleteRule,
   dismissAlert,
   errorMessage,
+  fetchDiff,
   formatDetail,
   getRule,
   getStats,
@@ -47,7 +58,9 @@ describe('api client', () => {
   it('calls every rule endpoint with the right method and body', async () => {
     const rule = makeRule()
     const input = ruleToInput(rule)
-    const fetchMock = mockFetch((method) => (method === 'DELETE' ? emptyResponse() : jsonResponse(method === 'GET' ? [rule] : rule)))
+    const fetchMock = mockFetch((method) =>
+      method === 'DELETE' ? emptyResponse() : jsonResponse(method === 'GET' ? [rule] : rule),
+    )
 
     await expect(listRules()).resolves.toEqual([rule])
     await createRule(input)
@@ -64,7 +77,9 @@ describe('api client', () => {
 
   it('calls every alert endpoint with the right method and body', async () => {
     const alert = makeAlert()
-    const fetchMock = mockFetch((method) => (method === 'DELETE' ? emptyResponse() : jsonResponse(method === 'GET' ? [alert] : alert)))
+    const fetchMock = mockFetch((method) =>
+      method === 'DELETE' ? emptyResponse() : jsonResponse(method === 'GET' ? [alert] : alert),
+    )
 
     await expect(listAlerts({ status: 'open', limit: 50 })).resolves.toEqual([alert])
     await acknowledgeAlert('a1', 'ana')
@@ -150,5 +165,21 @@ describe('api client', () => {
   it('turns any error into a message', () => {
     expect(errorMessage(new Error('boom'))).toBe('boom')
     expect(errorMessage('text')).toBe('text')
+  })
+
+  it('reads a diff with the server and revisions in the query', async () => {
+    const fetchMock = mockFetch(() => jsonResponse(makeDiff()))
+    await expect(fetchDiff('https://es.wikipedia.org', 102, 101)).resolves.toEqual(makeDiff())
+    expect(fetchCalls(fetchMock)).toEqual([
+      ['GET', '/api/diff?server_url=https%3A%2F%2Fes.wikipedia.org&rev_id=102&old_rev_id=101', undefined],
+    ])
+  })
+
+  it('reports diff errors with their status', async () => {
+    mockFetch(() => jsonResponse({ detail: 'new page' }, 422))
+    await expect(fetchDiff('https://es.wikipedia.org', 5, 0)).rejects.toMatchObject({
+      status: 422,
+      message: 'new page',
+    })
   })
 })

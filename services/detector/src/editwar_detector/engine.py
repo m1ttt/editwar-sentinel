@@ -94,17 +94,19 @@ class DetectionEngine:
         # 1. Classify before adding the edit: size restore compares with earlier edits.
         article = self.articles.get(article_key(event))
         article.evict(now)
-        reason = self.classifier.classify(event, article)
+        found = self.classifier.match(event, article)
         article.add(event)
-        if reason is not None:
+        if found is not None:
+            # Same event_id as the edit, so the alert timeline can mark it as a revert.
             result.revert = RevertEvent(
                 event_id=event.event_id,
                 wiki=event.wiki,
                 title=event.title,
                 user=event.user,
                 timestamp=event.timestamp,
-                reason=reason,
+                reason=found.reason,
                 server_url=event.server_url,
+                reverted_user=found.reverted_user,
             )
             article.add_revert(result.revert)
 
