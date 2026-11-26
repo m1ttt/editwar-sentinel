@@ -50,6 +50,8 @@ def configure_telemetry(service_name: str) -> bool:
         connection_string=connection_string,
         logger_name="editwar",
     )
+    # The Azure SDK logs every export at INFO. Keep stdout readable.
+    logging.getLogger("azure").setLevel(logging.WARNING)
     _configured = True
     logging.getLogger(__name__).info("Application Insights enabled for %s", service_name)
     return True

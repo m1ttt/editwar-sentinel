@@ -17,6 +17,7 @@ ConfigMaps and Secrets.
 - APPLICATIONINSIGHTS_CONNECTION_STRING (all). Default: empty = telemetry off.
 - LOG_LEVEL (all). Default: INFO.
 - SERVICE_VERSION (all). Default: dev.
+- HEALTH_PORT (ingestor, detector). Default: 8081.
 """
 
 from __future__ import annotations
@@ -54,5 +55,6 @@ WIKIS = "WIKIS"
 APPLICATIONINSIGHTS_CONNECTION_STRING = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 LOG_LEVEL = "LOG_LEVEL"
 SERVICE_VERSION = "SERVICE_VERSION"
+HEALTH_PORT = "HEALTH_PORT"
 
 DEFAULT_STREAM_URL = "https://stream.wikimedia.org/v2/stream/recentchange"
