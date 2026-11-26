@@ -3,9 +3,10 @@
 - AlertConsumer reads TOPIC_ALERTS with the group "<KAFKA_GROUP_ID>-alerts"
   ("api-alerts" by default). The replicas share the work: each alert is stored
   once, then sent to the dashboards.
-- LiveConsumer reads TOPIC_EDITS and TOPIC_REVERTS for the live view and the
-  stats. It uses no consumer group and starts at the latest offset, so every
-  api replica sees every message and nothing is committed.
+- LiveConsumer reads TOPIC_EDITS, TOPIC_REVERTS and TOPIC_ALERTS for the live
+  view and the stats. It uses no consumer group and starts at the latest offset,
+  so every api replica sees every message and nothing is committed. For reverts
+  and alerts it also looks up the article coordinates and sends a "geo" message.
 
 Both consumers run as background tasks. When Kafka is down they log a warning
 and try again with a growing delay; the api keeps answering HTTP requests.
@@ -21,6 +22,7 @@ from typing import Any, Protocol
 from aiokafka import AIOKafkaConsumer
 from opentelemetry import trace
 
+from editwar_api.geo import GeoPoint, GeoService
 from editwar_api.repositories import AlertRepository
 from editwar_api.stats import StatsService, page_url
 from editwar_api.websocket import WebSocketHub
@@ -166,9 +168,13 @@ class LiveConsumer:
     It has no consumer group, so every api replica reads every message.
     """
 
-    def __init__(self, stats: StatsService, hub: WebSocketHub) -> None:
+    def __init__(
+        self, stats: StatsService, hub: WebSocketHub, geo: GeoService | None = None
+    ) -> None:
         self._stats = stats
         self._hub = hub
+        self._geo = geo
+        self._geo_tasks: set[asyncio.Task[None]] = set()
         self.connected = False
 
     def _set_connected(self, value: bool) -> None:
@@ -187,9 +193,75 @@ class LiveConsumer:
             self._stats.record_revert(revert)
             data = revert.to_dict() | {"page_url": page_url(revert.server_url, revert.title)}
             await self._hub.broadcast({"type": "revert", "data": data})
+            self._locate_later(
+                "revert", revert.server_url, revert.wiki, revert.title, data["timestamp"]
+            )
         elif message.topic == TOPIC_ALERTS:
             alert = Alert.from_json(message.value)
-            await self._hub.broadcast({"type": "alert", "data": alert.to_dict()})
+            data = alert.to_dict()
+            await self._hub.broadcast({"type": "alert", "data": data})
+            self._locate_later(
+                "alert",
+                alert.server_url,
+                alert.wiki,
+                alert.title,
+                data["created_at"],
+                severity=alert.severity.value,
+                alert_kind=alert.kind,
+            )
+
+    def _locate_later(
+        self,
+        kind: str,
+        server_url: str,
+        wiki: str,
+        title: str,
+        timestamp: str,
+        severity: str | None = None,
+        alert_kind: str | None = None,
+    ) -> None:
+        """Look up the coordinates in the background, so the live feed never waits."""
+        if self._geo is None:
+            return
+        task = asyncio.create_task(
+            self.locate(kind, server_url, wiki, title, timestamp, severity, alert_kind)
+        )
+        self._geo_tasks.add(task)
+        task.add_done_callback(self._geo_tasks.discard)
+
+    async def locate(
+        self,
+        kind: str,
+        server_url: str,
+        wiki: str,
+        title: str,
+        timestamp: str,
+        severity: str | None = None,
+        alert_kind: str | None = None,
+    ) -> None:
+        """Send a "geo" message when the article has coordinates."""
+        if self._geo is None:
+            return
+        found = await self._geo.coordinates(server_url, title)
+        if found is None:
+            return
+        point = GeoPoint(
+            kind=kind,
+            wiki=wiki,
+            title=title,
+            lat=found[0],
+            lon=found[1],
+            page_url=page_url(server_url, title),
+            timestamp=timestamp,
+            severity=severity,
+            alert_kind=alert_kind,
+        )
+        self._geo.add(point)
+        await self._hub.broadcast({"type": "geo", "data": point.to_dict()})
+
+    async def drain(self) -> None:
+        """Wait for the pending coordinate lookups (used by tests and shutdown)."""
+        await asyncio.gather(*self._geo_tasks, return_exceptions=True)
 
     async def run(self, factory: ConsumerFactory, retry_delay: float = 1.0) -> None:
         await run_consumer("live", factory, self.handle, retry_delay, self._set_connected)
