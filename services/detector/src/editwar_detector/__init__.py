@@ -1,0 +1,1 @@
+"""EditWar Sentinel detector service."""
