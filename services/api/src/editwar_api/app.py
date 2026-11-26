@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -42,6 +42,32 @@ from editwar_api.websocket import WebSocketHub
 from editwar_domain.telemetry import configure_telemetry
 
 logger = logging.getLogger("editwar.api")
+
+DB_START_ATTEMPTS = 10
+DB_MAX_RETRY_DELAY_SECONDS = 10.0
+
+
+async def wait_for_database(
+    migrate: Callable[[], Awaitable[None]],
+    attempts: int = DB_START_ATTEMPTS,
+    first_delay: float = 1.0,
+) -> None:
+    """Run the migrations, retrying while the database is still starting.
+
+    In Kubernetes the api and PostgreSQL start at the same time. Retrying here
+    avoids a crash loop of the api pod.
+    """
+    delay = first_delay
+    for attempt in range(1, attempts + 1):
+        try:
+            await migrate()
+            return
+        except Exception as error:
+            if attempt == attempts:
+                raise
+            logger.warning("database not ready (attempt %d of %d): %s", attempt, attempts, error)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, DB_MAX_RETRY_DELAY_SECONDS)
 
 
 class DebugError(RuntimeError):
@@ -144,7 +170,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        await run_migrations(engine, settings.alembic_script_location)
+        await wait_for_database(lambda: run_migrations(engine, settings.alembic_script_location))
         seeded = await rules.seed_defaults()
         if seeded:
             logger.info("seeded %d default rules", seeded)

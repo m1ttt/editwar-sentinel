@@ -60,9 +60,11 @@ spec:
                 secretKeyRef:
                   name: editwar-postgres
                   key: DATABASE_URL
+          # Every replica reads the whole live feed (about 45m CPU at rest), so the
+          # request must stay above that or the HPA scales to the maximum for nothing.
           resources:
             requests:
-              cpu: 50m
+              cpu: 100m
               memory: 128Mi
             limits:
               cpu: 500m
