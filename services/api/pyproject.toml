@@ -1,6 +1,6 @@
 [project]
 name = "editwar-api"
-version = "1.0.0"
+version = "1.1.0"
 description = "REST and WebSocket API: rules CRUD, alerts, stats and live feed."
 requires-python = ">=3.12"
 dependencies = [
