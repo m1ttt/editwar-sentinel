@@ -124,7 +124,7 @@ jobs:
     # Set the repository variable CD_ENABLED=true once the Docker Hub secrets and the
     # Azure variables exist. Until then the pipeline stops after the tests, and the
     # deploy jobs (which need this job) are skipped too.
-    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CD_ENABLED == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -165,7 +165,7 @@ jobs:
   deploy-dev:
     name: Deploy dev
     needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     # The environment name is part of the OIDC subject (repo:m1ttt/editwar-sentinel:environment:dev).
     environment:
@@ -245,7 +245,7 @@ jobs:
   deploy-prod:
     name: Deploy prod
     needs: deploy-dev
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Required reviewers are set on the GitHub environment "prod". The job waits for approval.
     environment:
