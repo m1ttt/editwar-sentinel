@@ -17,6 +17,8 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.7",
     "mypy>=1.13",
+    # InMemoryMetricReader for the metric tests.
+    "opentelemetry-sdk>=1.27",
 ]
 
 [tool.ruff]
