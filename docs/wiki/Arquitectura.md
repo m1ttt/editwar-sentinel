@@ -74,7 +74,7 @@ Diagramas de clases: [ingesta](https://github.com/m1ttt/editwar-sentinel/blob/ma
 
 ## Recursos en Azure
 
-![Infraestructura en Azure](https://github.com/m1ttt/editwar-sentinel/blob/main/infra/diagrams/infraestructura-azure.png)
+![Infraestructura en Azure](https://github.com/m1ttt/editwar-sentinel/blob/main/infra/diagrams/infraestructura-azure.png?raw=true)
 
 | Recurso | Propósito |
 |---|---|
@@ -90,7 +90,7 @@ Kafka y PostgreSQL corren dentro del clúster como StatefulSets. Los equivalente
 
 ## Diagrama de deployment
 
-![Deployment en Azure](https://github.com/m1ttt/editwar-sentinel/blob/main/infra/diagrams/deployment-azure.png)
+![Deployment en Azure](https://github.com/m1ttt/editwar-sentinel/blob/main/infra/diagrams/deployment-azure.png?raw=true)
 
 ## Monitoreo en el portal
 

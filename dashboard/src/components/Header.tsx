@@ -16,6 +16,9 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
 
 const KNOWN_ENVIRONMENTS = ['local', 'dev', 'prod']
 
+// Version of this dashboard build. The api version comes from /api/version.
+export const UI_VERSION = import.meta.env.VITE_APP_VERSION || 'dev'
+
 // The badge color tells at a glance which environment serves the page.
 export function environmentClass(environment: string): string {
   const name = environment.toLowerCase()
@@ -39,7 +42,10 @@ export function Header({ version, status, stats }: HeaderProps) {
         {version ? (
           <span className="version">
             <span className="mono" data-testid="version">
-              v{version.version}
+              api {version.version}
+            </span>
+            <span className="mono" data-testid="ui-version">
+              ui {UI_VERSION}
             </span>
             <span className={`env ${environmentClass(version.environment)}`} data-testid="environment">
               {version.environment}

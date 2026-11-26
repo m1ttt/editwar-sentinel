@@ -6,7 +6,8 @@ import { environmentClass, Header } from './Header'
 describe('Header', () => {
   it('shows the version and the environment badge', () => {
     render(<Header version={{ service: 'api', version: '1.4.0', environment: 'prod' }} status="open" stats={null} />)
-    expect(screen.getByTestId('version')).toHaveTextContent('v1.4.0')
+    expect(screen.getByTestId('version')).toHaveTextContent('api 1.4.0')
+    expect(screen.getByTestId('ui-version')).toHaveTextContent('ui dev')
     const badge = screen.getByTestId('environment')
     expect(badge).toHaveTextContent('prod')
     expect(badge).toHaveClass('env', 'env-prod')
