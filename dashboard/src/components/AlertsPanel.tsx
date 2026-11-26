@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { acknowledgeAlert, deleteAlert, dismissAlert, errorMessage, listAlerts } from '../api/client'
+import { severityCounts } from '../lib/derive'
 import { alertTitle, formatTime, SEVERITY_LABELS, summarizeEvidence } from '../lib/format'
-import type { Alert, AlertStatus } from '../types'
+import type { Alert, AlertStatus, Severity } from '../types'
 import { Panel } from './Panel'
 
 interface AlertsPanelProps {
@@ -26,6 +27,30 @@ const STATUS_LABELS: Record<AlertStatus, string> = {
 }
 
 const SEVERITY_CLASSES = { high: 'hi', medium: 'me', low: 'lo' } as const
+
+const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low']
+
+// Stacked bar with the severity of the alerts in the table (the loaded set, not every alert).
+function SeverityBreakdown({ alerts }: { alerts: Alert[] }) {
+  const counts = severityCounts(alerts)
+  const total = Math.max(1, alerts.length)
+  return (
+    <div className="severity">
+      <span className="severity-bar" aria-hidden="true">
+        {SEVERITY_ORDER.map((severity) => (
+          <i key={severity} className={SEVERITY_CLASSES[severity]} style={{ width: `${(counts[severity] / total) * 100}%` }} />
+        ))}
+      </span>
+      <ul className="severity-legend" aria-label={`Severidad de las ${alerts.length} alertas cargadas`}>
+        {SEVERITY_ORDER.map((severity) => (
+          <li key={severity} className={`sev-${SEVERITY_CLASSES[severity]}`}>
+            {`${SEVERITY_LABELS[severity]} ${counts[severity]}`}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 export const ALERTS_LIMIT = 50
 
@@ -77,7 +102,11 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
   const operatorName = operator.trim()
 
   return (
-    <Panel title="Alertas" aside={openCount === undefined ? undefined : `${openCount} abiertas`}>
+    <Panel
+      title="Incidentes"
+      aside={openCount === undefined ? undefined : `${openCount} abiertas`}
+      className="area-alerts"
+    >
       <div className="toolbar">
         <label>
           Estado{' '}
@@ -90,8 +119,9 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
           </select>
         </label>
         <label>
-          Operador <input value={operator} onChange={(event) => setOperator(event.target.value)} size={12} />
+          Operador <input value={operator} onChange={(event) => setOperator(event.target.value)} size={10} />
         </label>
+        <SeverityBreakdown alerts={alerts} />
       </div>
       {error && (
         <p className="error" role="alert">
@@ -99,45 +129,58 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
         </p>
       )}
       <div className="table-wrap">
-        <table>
+        <table className="incidents">
           <thead>
             <tr>
               <th>Hora</th>
-              <th>Tipo</th>
-              <th>Severidad</th>
-              <th>Artículo</th>
-              <th>Evidencia</th>
+              <th>Sev.</th>
+              <th>Incidente · evidencia</th>
               <th>Estado</th>
-              <th />
+              <th>
+                <span className="sr-only">Acciones</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {alerts.length === 0 && (
               <tr>
-                <td colSpan={7} className="empty">
+                <td colSpan={5} className="empty">
                   No hay alertas.
                 </td>
               </tr>
             )}
             {alerts.map((alert) => (
-              <tr key={alert.id}>
+              <tr
+                key={alert.id}
+                className={[
+                  `sev-row-${SEVERITY_CLASSES[alert.severity] ?? 'lo'}`,
+                  `status-${alert.status}`,
+                  alert.id === lastAlertId ? 'row-new' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
                 <td className="mono">{formatTime(alert.created_at)}</td>
-                <td className="mono">{alert.kind}</td>
                 <td>
                   <span className={`pill ${SEVERITY_CLASSES[alert.severity] ?? 'lo'}`}>
                     {SEVERITY_LABELS[alert.severity] ?? alert.severity}
                   </span>
                 </td>
-                <td>
+                <td className="incident">
                   <a href={alert.page_url} target="_blank" rel="noreferrer">
                     {alertTitle(alert.title, alert.wiki)}
-                  </a>{' '}
-                  <span className="mono">{alert.wiki}</span>
+                  </a>
+                  <span className="incident-line">
+                    <span className="mono incident-meta">
+                      {alert.kind} · {alert.wiki}
+                    </span>
+                    <span className="evidence" title={JSON.stringify(alert.evidence)}>
+                      {summarizeEvidence(alert.evidence)}
+                    </span>
+                  </span>
                 </td>
-                <td className="evidence" title={JSON.stringify(alert.evidence)}>
-                  {summarizeEvidence(alert.evidence)}
-                </td>
-                <td>
+                <td className="status">
+                  <span className={`status-dot status-dot-${alert.status}`} aria-hidden="true" />
                   {STATUS_LABELS[alert.status] ?? alert.status}
                   {alert.acknowledged_by && <span className="muted"> ({alert.acknowledged_by})</span>}
                 </td>

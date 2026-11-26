@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ruleToInput } from '../lib/ruleValidation'
-import { emptyResponse, fetchCalls, jsonResponse, makeAlert, makeRule, makeStats, mockFetch } from '../test/fixtures'
+import { emptyResponse, fetchCalls, jsonResponse, makeAlert, makeGeo, makeRule, makeStats, mockFetch } from '../test/fixtures'
 import {
   acknowledgeAlert,
   alertsQuery,
@@ -15,6 +15,7 @@ import {
   getStats,
   getVersion,
   listAlerts,
+  listRecentGeo,
   listRules,
   updateRule,
 } from './client'
@@ -128,6 +129,22 @@ describe('api client', () => {
     expect(formatDetail([{ msg: 'no location' }])).toBe('no location')
     expect(formatDetail([{ loc: ['body'] }])).toBe('')
     expect(formatDetail({})).toBeNull()
+  })
+
+  it('reads the recent map points', async () => {
+    const fetchMock = mockFetch(() => jsonResponse([makeGeo()]))
+    await expect(listRecentGeo()).resolves.toEqual([makeGeo()])
+    expect(fetchCalls(fetchMock)[0]).toEqual(['GET', '/api/geo/recent?limit=200', undefined])
+  })
+
+  it('treats a 404 from an older api as no map points', async () => {
+    mockFetch(() => jsonResponse({ detail: 'Not Found' }, 404))
+    await expect(listRecentGeo(10)).resolves.toEqual([])
+  })
+
+  it('reports other map errors', async () => {
+    mockFetch(() => new Response('bad gateway', { status: 502 }))
+    await expect(listRecentGeo()).rejects.toThrow('HTTP 502')
   })
 
   it('turns any error into a message', () => {
