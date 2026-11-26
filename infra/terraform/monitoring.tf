@@ -1,5 +1,5 @@
 # Monitoring: Log Analytics, Container Insights data collection,
-# Application Insights per environment, Kubernetes Secrets and a small alert.
+# Application Insights per environment and Kubernetes Secrets.
 
 # ---------------------------------------------------------------------------
 # Log Analytics workspace: one store for cluster logs, metrics and APM data.
@@ -154,48 +154,4 @@ resource "kubernetes_secret_v1" "postgres" {
   type = "Opaque"
 }
 
-# ---------------------------------------------------------------------------
-# Alert: failed requests per environment.
-# The action group has no receivers unless alert_email is set.
-# ---------------------------------------------------------------------------
-
-resource "azurerm_monitor_action_group" "main" {
-  name                = "ag-${var.project_name}"
-  resource_group_name = azurerm_resource_group.main.name
-  short_name          = "editwar" # 12 characters maximum
-  tags                = local.tags
-
-  dynamic "email_receiver" {
-    for_each = var.alert_email == "" ? [] : [var.alert_email]
-    content {
-      name                    = "team-email"
-      email_address           = email_receiver.value
-      use_common_alert_schema = true
-    }
-  }
-}
-
-resource "azurerm_monitor_metric_alert" "failed_requests" {
-  for_each = toset(var.environments)
-
-  name                = "alert-failed-requests-${each.key}"
-  resource_group_name = azurerm_resource_group.main.name
-  scopes              = [azurerm_application_insights.env[each.key].id]
-  description         = "More than ${var.failed_requests_threshold} failed requests in 5 minutes in ${each.key}."
-  severity            = each.key == "prod" ? 1 : 3
-  frequency           = "PT1M"
-  window_size         = "PT5M"
-  tags                = merge(local.tags, { environment = each.key })
-
-  criteria {
-    metric_namespace = "microsoft.insights/components"
-    metric_name      = "requests/failed"
-    aggregation      = "Count"
-    operator         = "GreaterThan"
-    threshold        = var.failed_requests_threshold
-  }
-
-  action {
-    action_group_id = azurerm_monitor_action_group.main.id
-  }
-}
+# Action groups and alerts are in alerts.tf.
