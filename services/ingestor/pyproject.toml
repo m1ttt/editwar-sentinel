@@ -1,6 +1,6 @@
 [project]
 name = "editwar-ingestor"
-version = "0.1.0"
+version = "1.0.0"
 description = "Reads the Wikimedia recentchange stream and publishes edits to Kafka."
 requires-python = ">=3.12"
 dependencies = [
