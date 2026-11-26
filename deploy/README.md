@@ -133,6 +133,7 @@ Haz estos pasos una vez, en Settings del repositorio.
 | `TFSTATE_RESOURCE_GROUP` | Grupo de recursos de la cuenta de almacenamiento del estado. |
 | `TFSTATE_STORAGE_ACCOUNT` | Cuenta de almacenamiento del estado de Terraform. |
 | `TFSTATE_CONTAINER` | Contenedor del estado. |
+| `CD_ENABLED` | `true` cuando ya existen los secretos de Docker Hub y las variables de Azure. Sin este valor, los pipelines terminan después de las pruebas y no ejecutan `build` ni `deploy`. |
 
 **Secrets**
 
