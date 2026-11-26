@@ -79,7 +79,7 @@ jobs:
     # Set the repository variable CD_ENABLED=true once the Docker Hub secrets and the
     # Azure variables exist. Until then the pipeline stops after the tests, and the
     # deploy jobs (which need this job) are skipped too.
-    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CD_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +119,7 @@ jobs:
   deploy-dev:
     name: Deploy dev
     needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: dev
@@ -180,7 +180,7 @@ jobs:
   deploy-prod:
     name: Deploy prod
     needs: deploy-dev
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Required reviewers on the "prod" environment make this job wait for approval.
     environment:

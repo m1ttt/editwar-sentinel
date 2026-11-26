@@ -37,6 +37,8 @@ Los jobs `deploy-*` entran a Azure con OIDC (sin contraseñas), copian `deploy/k
 
 El environment `prod` de GitHub tiene revisores obligatorios, así que `deploy-prod` espera una aprobación manual.
 
+Una ejecución manual (`workflow_dispatch`) de `backend.yml` o `frontend.yml` sobre `develop` o `main` construye y despliega el último commit de la rama sin un commit nuevo. En `main` también espera la aprobación de `prod`.
+
 ## Configuración única
 
 La lista completa de variables, secretos, environments y protección de ramas está en [deploy/README.md](https://github.com/m1ttt/editwar-sentinel/blob/main/deploy/README.md#configuración-única-en-github). Los valores salen de `terraform output` (ver [infra/README.md](https://github.com/m1ttt/editwar-sentinel/blob/main/infra/README.md)).
