@@ -1,77 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  chartGeometry,
-  formatPercent,
-  formatUptime,
-  niceCeiling,
-  revertRate,
-  severityCounts,
-  threatBand,
-  threatLevel,
-  throughputSummary,
-  uptimeSince,
-  wikiActivity,
-} from './derive'
-
-describe('revertRate', () => {
-  it('divides reverts by edits', () => {
-    expect(revertRate({ total_edits: 200, total_reverts: 3 })).toBe(0.015)
-  })
-
-  it('is zero before the first edit', () => {
-    expect(revertRate({ total_edits: 0, total_reverts: 0 })).toBe(0)
-  })
-
-  it('formats as a percent with two decimals', () => {
-    expect(formatPercent(0.00568)).toBe('0.57 %')
-  })
-})
-
-describe('threatLevel', () => {
-  it.each([
-    [0, 'low'],
-    [24, 'low'],
-    [25, 'guarded'],
-    [49, 'guarded'],
-    [50, 'high'],
-    [74, 'high'],
-    [75, 'critical'],
-    [100, 'critical'],
-  ] as const)('puts score %i in band %s', (score, band) => {
-    expect(threatBand(score)).toBe(band)
-  })
-
-  it('is low with no alerts and no reverts', () => {
-    expect(threatLevel({ open_alerts: 0, total_edits: 1000, total_reverts: 0 })).toEqual({
-      score: 0,
-      band: 'low',
-      label: 'Bajo',
-      alertPoints: 0,
-      ratePoints: 0,
-    })
-  })
-
-  it('adds 6 points per open alert and 20 points for a 1 % revert rate', () => {
-    const level = threatLevel({ open_alerts: 3, total_edits: 1000, total_reverts: 10 })
-    expect(level.alertPoints).toBe(18)
-    expect(level.ratePoints).toBe(20)
-    expect(level.score).toBe(38)
-    expect(level.label).toBe('Moderado')
-  })
-
-  it('caps both parts, so the score never passes 100', () => {
-    const level = threatLevel({ open_alerts: 40, total_edits: 100, total_reverts: 50 })
-    expect(level).toMatchObject({ score: 100, band: 'critical', label: 'Crítico', alertPoints: 60, ratePoints: 40 })
-  })
-
-  it('ignores a negative alert count', () => {
-    expect(threatLevel({ open_alerts: -2, total_edits: 0, total_reverts: 0 }).score).toBe(0)
-  })
-
-  it('uses the high band between 50 and 74', () => {
-    expect(threatLevel({ open_alerts: 9, total_edits: 0, total_reverts: 0 })).toMatchObject({ score: 54, label: 'Alto' })
-  })
-})
+import { chartGeometry, formatSpan, niceCeiling, severityCounts, throughputSummary, wikiActivity } from './derive'
 
 describe('severityCounts', () => {
   it('counts each severity and skips unknown values', () => {
@@ -151,23 +79,11 @@ describe('chartGeometry', () => {
   })
 })
 
-describe('formatUptime', () => {
-  it('shows hours, minutes and seconds', () => {
-    expect(formatUptime(3_723_000)).toBe('01:02:03')
-  })
-
-  it('adds days after 24 hours', () => {
-    expect(formatUptime(2 * 86_400_000 + 5_000)).toBe('2 d 00:00:05')
-  })
-
-  it('shows dashes for an invalid duration', () => {
-    expect(formatUptime(-1)).toBe('--:--:--')
-    expect(formatUptime(Number.NaN)).toBe('--:--:--')
-  })
-
-  it('counts from stats.started_at', () => {
-    const now = new Date('2026-11-25T21:00:00Z').getTime()
-    expect(uptimeSince('2026-11-25T20:00:00+00:00', now)).toBe('01:00:00')
-    expect(uptimeSince('not a date', now)).toBe('--:--:--')
+describe('formatSpan', () => {
+  it('shows seconds, then minutes and seconds', () => {
+    expect(formatSpan(45.4)).toBe('45 s')
+    expect(formatSpan(178)).toBe('2 min 58 s')
+    expect(formatSpan(120)).toBe('2 min 00 s')
+    expect(formatSpan(-3)).toBe('0 s')
   })
 })

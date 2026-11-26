@@ -134,8 +134,7 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
             <tr>
               <th>Hora</th>
               <th>Sev.</th>
-              <th>Incidente · evidencia</th>
-              <th>Estado</th>
+              <th>Incidente · estado · evidencia</th>
               <th>
                 <span className="sr-only">Acciones</span>
               </th>
@@ -144,7 +143,7 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
           <tbody>
             {alerts.length === 0 && (
               <tr>
-                <td colSpan={5} className="empty">
+                <td colSpan={4} className="empty">
                   No hay alertas.
                 </td>
               </tr>
@@ -171,18 +170,20 @@ export function AlertsPanel({ lastAlert, openCount, refreshKey = 0 }: AlertsPane
                     {alertTitle(alert.title, alert.wiki)}
                   </a>
                   <span className="incident-line">
-                    <span className="mono incident-meta">
-                      {alert.kind} · {alert.wiki}
+                    <span className="incident-meta">
+                      <span className="mono">
+                        {alert.kind} · {alert.wiki}
+                      </span>
+                      <span className="status">
+                        <span className={`status-dot status-dot-${alert.status}`} aria-hidden="true" />
+                        {STATUS_LABELS[alert.status] ?? alert.status}
+                        {alert.acknowledged_by && <span className="muted"> ({alert.acknowledged_by})</span>}
+                      </span>
                     </span>
                     <span className="evidence" title={JSON.stringify(alert.evidence)}>
                       {summarizeEvidence(alert.evidence)}
                     </span>
                   </span>
-                </td>
-                <td className="status">
-                  <span className={`status-dot status-dot-${alert.status}`} aria-hidden="true" />
-                  {STATUS_LABELS[alert.status] ?? alert.status}
-                  {alert.acknowledged_by && <span className="muted"> ({alert.acknowledged_by})</span>}
                 </td>
                 <td className="actions">
                   {alert.status === 'open' && (

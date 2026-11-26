@@ -1,64 +1,8 @@
-// Values that the dashboard derives from data it already has (stats and the
+// Values that the dashboard derives from data it already has (alerts and the
 // live feed). Nothing here calls the api. Every function is pure, so the tests
 // call it directly.
 import type { FeedEdit } from '../hooks/liveFeedReducer'
-import type { Alert, Severity, Stats } from '../types'
-
-// ---- Revert rate ----
-
-// Reverts per edit since the api started, as a fraction (0.0057 = 0.57 %).
-export function revertRate(stats: Pick<Stats, 'total_edits' | 'total_reverts'>): number {
-  return stats.total_edits > 0 ? stats.total_reverts / stats.total_edits : 0
-}
-
-// "0.57 %". Two decimals, because a normal revert rate is below 1 %.
-export function formatPercent(fraction: number): string {
-  return `${(fraction * 100).toFixed(2)} %`
-}
-
-// ---- Threat level ----
-
-export type ThreatBand = 'low' | 'guarded' | 'high' | 'critical'
-
-export interface ThreatLevel {
-  // 0 to 100.
-  score: number
-  band: ThreatBand
-  label: string
-  // The two parts of the score, so the panel can show where it comes from.
-  alertPoints: number
-  ratePoints: number
-}
-
-// Open alerts give up to 60 points (6 per alert, 10 alerts or more is the maximum).
-export const ALERT_POINTS = 6
-export const MAX_ALERT_POINTS = 60
-// The revert rate gives up to 40 points. A rate of 2 % or more is the maximum.
-export const RATE_CEILING = 0.02
-export const MAX_RATE_POINTS = 40
-
-export const THREAT_LABELS: Record<ThreatBand, string> = {
-  low: 'Bajo',
-  guarded: 'Moderado',
-  high: 'Alto',
-  critical: 'Crítico',
-}
-
-export function threatBand(score: number): ThreatBand {
-  if (score >= 75) return 'critical'
-  if (score >= 50) return 'high'
-  if (score >= 25) return 'guarded'
-  return 'low'
-}
-
-// The score uses only /api/stats: the open alert count and the revert rate.
-export function threatLevel(stats: Pick<Stats, 'open_alerts' | 'total_edits' | 'total_reverts'>): ThreatLevel {
-  const alertPoints = Math.min(Math.max(stats.open_alerts, 0) * ALERT_POINTS, MAX_ALERT_POINTS)
-  const ratePoints = Math.min(revertRate(stats) / RATE_CEILING, 1) * MAX_RATE_POINTS
-  const score = Math.round(alertPoints + ratePoints)
-  const band = threatBand(score)
-  return { score, band, label: THREAT_LABELS[band], alertPoints, ratePoints }
-}
+import type { Alert, Severity } from '../types'
 
 // ---- Severity breakdown ----
 
@@ -154,25 +98,10 @@ export function chartGeometry(values: number[], width: number, height: number): 
 
 // ---- Time ----
 
-function pad(value: number): string {
-  return String(value).padStart(2, '0')
-}
-
-// "04:05:06" or "3 d 04:05:06". A negative or invalid duration shows as "--:--:--".
-export function formatUptime(milliseconds: number): string {
-  if (!Number.isFinite(milliseconds) || milliseconds < 0) {
-    return '--:--:--'
-  }
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const days = Math.floor(totalSeconds / 86_400)
-  const hours = Math.floor((totalSeconds % 86_400) / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  const clock = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
-  return days > 0 ? `${days} d ${clock}` : clock
-}
-
-// Time since the api started, from stats.started_at.
-export function uptimeSince(startedAt: string, now: number): string {
-  return formatUptime(now - new Date(startedAt).getTime())
+// Length of the chart window: "45 s" or "2 min 58 s".
+export function formatSpan(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  return minutes > 0 ? `${minutes} min ${String(rest).padStart(2, '0')} s` : `${rest} s`
 }

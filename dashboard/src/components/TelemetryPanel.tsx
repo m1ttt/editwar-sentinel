@@ -1,10 +1,11 @@
 import { useId } from 'react'
-import { chartGeometry, throughputSummary } from '../lib/derive'
+import type { RatePoint } from '../hooks/liveFeedReducer'
+import { chartGeometry, formatSpan, throughputSummary } from '../lib/derive'
 import { Panel } from './Panel'
 
 interface TelemetryPanelProps {
-  // Edits per second of the last stats messages, oldest first.
-  throughput: number[]
+  // Instantaneous edits per second between consecutive stats messages, oldest first.
+  rates: RatePoint[]
 }
 
 const WIDTH = 600
@@ -16,7 +17,9 @@ function formatRate(value: number): string {
   return `${value.toFixed(1)} ed/s`
 }
 
-export function TelemetryPanel({ throughput }: TelemetryPanelProps) {
+export function TelemetryPanel({ rates }: TelemetryPanelProps) {
+  const throughput = rates.map((point) => point.value)
+  const span = rates.length > 1 ? (rates[rates.length - 1].at - rates[0].at) / 1000 : 0
   // React ids contain colons, which do not work in url(#...).
   const fillId = `tele-fill-${useId().replace(/:/g, '')}`
   const geometry = chartGeometry(throughput, WIDTH, HEIGHT)
@@ -40,7 +43,7 @@ export function TelemetryPanel({ throughput }: TelemetryPanelProps) {
   )
 
   return (
-    <Panel title="Telemetría en vivo" aside="ediciones/s" className="area-telemetry">
+    <Panel title="Telemetría en vivo" aside="ediciones/s instantáneas" className="area-telemetry">
       {readouts}
       <div className="chart">
         <div className="chart-axis mono" aria-hidden="true">
@@ -78,11 +81,11 @@ export function TelemetryPanel({ throughput }: TelemetryPanelProps) {
               style={{ left: `${(geometry.last.x / WIDTH) * 100}%`, top: `${(geometry.last.y / HEIGHT) * 100}%` }}
             />
           )}
-          {!geometry && <p className="chart-empty">Esperando muestras de /api/stats…</p>}
+          {!geometry && <p className="chart-empty">Esperando dos lecturas de /api/stats…</p>}
         </div>
       </div>
       <div className="chart-foot mono" aria-hidden="true">
-        <span>{`−${throughput.length} muestras`}</span>
+        <span>{`−${formatSpan(span)} · ${throughput.length} muestras`}</span>
         <span>ahora</span>
       </div>
     </Panel>

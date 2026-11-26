@@ -2,9 +2,23 @@ import type { ConnectionStatus } from '../hooks/useLiveFeed'
 import { useNow } from '../hooks/useNow'
 import type { VersionInfo } from '../types'
 
+export type View = 'monitor' | 'rules'
+
+export const VIEWS: { id: View; label: string }[] = [
+  { id: 'monitor', label: 'Monitor' },
+  { id: 'rules', label: 'Reglas' },
+]
+
+// id of the element that shows a view, for aria-controls.
+export function viewPanelId(view: View): string {
+  return `view-${view}`
+}
+
 interface HeaderProps {
   version: VersionInfo | null
   status: ConnectionStatus
+  view?: View
+  onViewChange?: (view: View) => void
 }
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
@@ -50,7 +64,7 @@ function Logo() {
   )
 }
 
-export function Header({ version, status }: HeaderProps) {
+export function Header({ version, status, view = 'monitor', onViewChange }: HeaderProps) {
   return (
     <header className="top">
       <div className="brand">
@@ -61,6 +75,22 @@ export function Header({ version, status }: HeaderProps) {
           </span>
           <span className="tagline">Consola de amenazas · Wikipedia</span>
         </div>
+      </div>
+      <div className="tabs" role="tablist" aria-label="Vistas">
+        {VIEWS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`tab-${item.id}`}
+            aria-selected={view === item.id}
+            aria-controls={viewPanelId(item.id)}
+            className={view === item.id ? 'tab tab-active' : 'tab'}
+            onClick={() => onViewChange?.(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
       <div className={`live live-${status}`} role="status">
         <span className={`dot dot-${status}`} aria-hidden="true" />
