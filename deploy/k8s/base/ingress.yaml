@@ -1,0 +1,46 @@
+# One entry point. Overlays set the ingress class (traefik or nginx) and the host.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: editwar
+spec:
+  rules:
+    - http:
+        paths:
+          # API routes go straight to the api Service.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /healthz
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /readyz
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          # Everything else is the dashboard.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dashboard
+                port:
+                  number: 8080

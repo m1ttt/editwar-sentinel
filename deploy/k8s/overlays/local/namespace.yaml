@@ -1,0 +1,5 @@
+# In k3d nobody else creates the namespace, so this overlay does.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: editwar

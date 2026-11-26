@@ -1,0 +1,56 @@
+# Prod overlay for AKS (namespace editwar-prod). Terraform creates the namespace and the Secrets.
+#
+# The pipeline edits a working copy of this folder before "kubectl apply -k":
+#   kustomize edit set image m1ttt/editwar-api=m1ttt/editwar-api:sha-<commit>   (one per image)
+#   kustomize edit set configmap editwar-config --from-literal=SERVICE_VERSION=sha-<commit>
+#   kustomize edit add patch --kind Ingress --name editwar --patch '<replace host with $PROD_HOST>'
+# The values below are only defaults for a manual render.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: editwar-prod
+
+resources:
+  - ../../base
+
+# "latest" is the tag that CI pushes on every merge to main.
+images:
+  - name: m1ttt/editwar-ingestor
+    newTag: latest
+  - name: m1ttt/editwar-detector
+    newTag: latest
+  - name: m1ttt/editwar-api
+    newTag: latest
+  - name: m1ttt/editwar-dashboard
+    newTag: latest
+
+configMapGenerator:
+  - name: editwar-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=prod
+      - LOG_LEVEL=INFO
+      - ENABLE_DEBUG_ENDPOINTS=false
+      # Placeholder. The pipeline replaces it with sha-<commit>.
+      - SERVICE_VERSION=prod
+
+patches:
+  - path: ingress-patch.yaml
+    target:
+      kind: Ingress
+      name: editwar
+  - target:
+      kind: ScaledObject
+      name: detector
+    patch: |-
+      - op: replace
+        path: /spec/triggers/0/metadata/bootstrapServers
+        value: kafka.editwar-prod.svc.cluster.local:9092
+  # Prod keeps at least 2 api pods. The HPA owns the count, so the minimum lives here.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
