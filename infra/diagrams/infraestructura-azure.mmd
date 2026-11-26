@@ -1,0 +1,65 @@
+%% Infraestructura de EditWar Sentinel en Azure (creada por infra/terraform)
+flowchart LR
+    user([Usuario / navegador])
+    nip[[nip.io<br/>editwar.&lt;ip&gt;.nip.io<br/>editwar-dev.&lt;ip&gt;.nip.io]]
+    wiki[(Wikimedia<br/>EventStreams SSE)]
+
+    subgraph sub["Suscripción de Azure"]
+        subgraph rg["rg-editwar-sentinel"]
+            law[(Log Analytics<br/>log-editwar-sentinel)]
+            dcr[Data Collection Rule<br/>Container Insights]
+            appiDev[Application Insights<br/>appi-...-dev]
+            appiProd[Application Insights<br/>appi-...-prod]
+            ag[Action group +<br/>alertas de requests fallidos]
+
+            subgraph aks["AKS aks-editwar-sentinel (Free tier, 2 x Standard_B2s, KEDA, Container Insights)"]
+                ingress[ingress-nginx<br/>namespace ingress-nginx]
+
+                subgraph nsProd["namespace editwar-prod"]
+                    dashP[dashboard]
+                    apiP[api]
+                    detP[detector<br/>KEDA 1-5]
+                    ingP[ingestor]
+                    kafkaP[(Kafka<br/>StatefulSet)]
+                    pgP[(PostgreSQL<br/>StatefulSet)]
+                    secP{{Secrets<br/>editwar-telemetry<br/>editwar-postgres}}
+                end
+
+                subgraph nsDev["namespace editwar-dev"]
+                    dashD[dashboard]
+                    apiD[api]
+                    detD[detector<br/>KEDA 1-5]
+                    ingD[ingestor]
+                    kafkaD[(Kafka<br/>StatefulSet)]
+                    pgD[(PostgreSQL<br/>StatefulSet)]
+                    secD{{Secrets<br/>editwar-telemetry<br/>editwar-postgres}}
+                end
+            end
+        end
+
+        subgraph nrg["MC_ node resource group (administrado por AKS)"]
+            pip[IP pública estática<br/>Standard + DNS label]
+            lb[Azure Load Balancer]
+        end
+    end
+
+    subgraph entra["Microsoft Entra ID"]
+        app[App registration<br/>github-editwar-sentinel<br/>credenciales federadas OIDC]
+    end
+
+    user --> nip --> pip --> lb --> ingress
+    ingress --> dashP & apiP
+    ingress --> dashD & apiD
+    wiki --> ingP & ingD
+    ingP --> kafkaP --> detP --> kafkaP
+    kafkaP --> apiP --> pgP
+    ingD --> kafkaD --> detD --> kafkaD
+    kafkaD --> apiD --> pgD
+
+    aks -- métricas CPU, memoria, logs --> dcr --> law
+    apiP & detP & ingP -. trazas, errores, logs .-> appiProd
+    apiD & detD & ingD -. trazas, errores, logs .-> appiDev
+    appiProd --> law
+    appiDev --> law
+    appiProd & appiDev --> ag
+    app -- Azure Kubernetes Service<br/>Cluster User Role --> aks

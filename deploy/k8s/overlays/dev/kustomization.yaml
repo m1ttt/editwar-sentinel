@@ -1,0 +1,50 @@
+# Dev overlay for AKS (namespace editwar-dev). Terraform creates the namespace and the Secrets.
+#
+# The pipeline edits a working copy of this folder before "kubectl apply -k":
+#   kustomize edit set image m1ttt/editwar-api=m1ttt/editwar-api:sha-<commit>   (one per image)
+#   kustomize edit set configmap editwar-config --from-literal=SERVICE_VERSION=sha-<commit>
+#   kustomize edit add patch --kind Ingress --name editwar --patch '<replace host with $DEV_HOST>'
+# The values below are only defaults for a manual render.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: editwar-dev
+
+resources:
+  - ../../base
+
+# "edge" is the tag that CI pushes on every merge to develop.
+images:
+  - name: m1ttt/editwar-ingestor
+    newTag: edge
+  - name: m1ttt/editwar-detector
+    newTag: edge
+  - name: m1ttt/editwar-api
+    newTag: edge
+  - name: m1ttt/editwar-dashboard
+    newTag: edge
+
+configMapGenerator:
+  - name: editwar-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=dev
+      - LOG_LEVEL=DEBUG
+      - ENABLE_DEBUG_ENDPOINTS=true
+      # Placeholder. The pipeline replaces it with sha-<commit>.
+      - SERVICE_VERSION=dev
+
+patches:
+  # ingress-nginx is installed by Terraform. The host is a placeholder the pipeline replaces.
+  - path: ingress-patch.yaml
+    target:
+      kind: Ingress
+      name: editwar
+  # KEDA (AKS add-on) runs in kube-system and needs the full DNS name of the broker.
+  - target:
+      kind: ScaledObject
+      name: detector
+    patch: |-
+      - op: replace
+        path: /spec/triggers/0/metadata/bootstrapServers
+        value: kafka.editwar-dev.svc.cluster.local:9092
