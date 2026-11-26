@@ -1,0 +1,13 @@
+# k3d cluster for local work: 1 server and 2 agents (k3s in Docker).
+# Create with: k3d cluster create --config deploy/k3d/cluster.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: editwar
+servers: 1
+agents: 2
+ports:
+  # Port 8088 on the laptop goes to port 80 of the k3d load balancer, where Traefik listens.
+  - port: 8088:80
+    nodeFilters:
+      - loadbalancer

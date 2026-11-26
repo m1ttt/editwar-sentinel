@@ -1,0 +1,80 @@
+# Ingestor: reads the Wikimedia stream (or the replay file) and publishes to wiki.edits.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestor
+  labels:
+    app: ingestor
+spec:
+  selector:
+    app: ingestor
+  ports:
+    - name: health
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestor
+  labels:
+    app: ingestor
+spec:
+  # A single reader: two replicas would publish every edit twice.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ingestor
+  template:
+    metadata:
+      labels:
+        app: ingestor
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001 # contract with services/ingestor/Dockerfile
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ingestor
+          image: m1ttt/editwar-ingestor
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: editwar-config
+            - secretRef:
+                name: editwar-telemetry
+                optional: true
+          env:
+            - name: HEALTH_PORT
+              value: "8081"
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10

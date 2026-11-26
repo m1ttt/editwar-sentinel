@@ -1,0 +1,14 @@
+# JSON patch for the Ingress in dev.
+- op: add
+  path: /spec/ingressClassName
+  value: nginx
+# Placeholder host. The pipeline adds a later patch that sets the real $DEV_HOST.
+- op: add
+  path: /spec/rules/0/host
+  value: editwar-dev.placeholder.invalid
+# Keep WebSocket connections open for up to one hour.
+- op: add
+  path: /metadata/annotations
+  value:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
