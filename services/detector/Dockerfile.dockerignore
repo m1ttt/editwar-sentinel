@@ -1,0 +1,8 @@
+# Used by BuildKit for services/detector/Dockerfile (context = repo root).
+**
+!libs/domain/pyproject.toml
+!libs/domain/src/**
+!services/detector/pyproject.toml
+!services/detector/src/**
+**/__pycache__
+**/*.pyc
