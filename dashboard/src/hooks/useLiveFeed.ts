@@ -43,7 +43,8 @@ export function useLiveFeed(url: string = liveFeedUrl()) {
       socket.onmessage = (event: MessageEvent) => {
         const message = parseMessage(event.data)
         if (message) {
-          dispatch(message)
+          // Stats get the receive time, for the instantaneous rate of the telemetry chart.
+          dispatch(message.type === 'stats' ? { ...message, at: Date.now() } : message)
         }
       }
       // The browser fires "close" after an error too, so one handler is enough.

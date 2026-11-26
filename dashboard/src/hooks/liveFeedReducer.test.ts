@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { makeAlert, makeEdit, makeStats } from '../test/fixtures'
+import { makeAlert, makeEdit, makeGeo, makeStats } from '../test/fixtures'
 import type { LiveMessage } from '../types'
-import { initialFeedState, liveFeedReducer, MAX_EDITS, MAX_POINTS, parseMessage, type FeedState } from './liveFeedReducer'
+import {
+  initialFeedState,
+  liveFeedReducer,
+  MAX_EDITS,
+  addRateSample,
+  MAX_GEO,
+  MAX_POINTS,
+  MAX_RATE_SAMPLES,
+  mergeGeo,
+  MIN_RATE_INTERVAL_MS,
+  parseMessage,
+  type FeedState,
+} from './liveFeedReducer'
 
 function applyAll(messages: LiveMessage[], state: FeedState = initialFeedState): FeedState {
   return messages.reduce(liveFeedReducer, state)
@@ -129,7 +141,115 @@ describe('liveFeedReducer', () => {
   })
 })
 
+describe('instantaneous rate', () => {
+  const T0 = Date.UTC(2026, 10, 25, 21, 0, 0)
+
+  function stats(total: number, seconds: number) {
+    return { type: 'stats' as const, data: makeStats({ total_edits: total }), at: T0 + seconds * 1000 }
+  }
+
+  it('uses the first reading only as the start point', () => {
+    const state = liveFeedReducer(initialFeedState, stats(1000, 0))
+    expect(state.rates).toEqual([])
+    expect(state.lastCount).toEqual({ total: 1000, at: T0 })
+  })
+
+  it('divides the new edits by the time between two readings', () => {
+    const state = [stats(1000, 0), stats(1030, 2), stats(1040, 4)].reduce(liveFeedReducer, initialFeedState)
+    expect(state.rates).toEqual([
+      { at: T0 + 2000, value: 15 },
+      { at: T0 + 4000, value: 5 },
+    ])
+  })
+
+  it('starts again after a counter reset (api restart)', () => {
+    const state = [stats(5000, 0), stats(5020, 2), stats(10, 4), stats(30, 6)].reduce(liveFeedReducer, initialFeedState)
+    expect(state.rates.map((point) => point.value)).toEqual([10, 10])
+    expect(state.lastCount).toEqual({ total: 30, at: T0 + 6000 })
+  })
+
+  it('skips a reading with no time difference or one that is too close', () => {
+    const first = liveFeedReducer(initialFeedState, stats(1000, 0))
+    expect(liveFeedReducer(first, stats(1010, 0)).rates).toEqual([])
+    const close = addRateSample(first, { total: 1010, at: T0 + MIN_RATE_INTERVAL_MS - 1 })
+    expect(close).toBe(first)
+    // The skipped reading does not move the start point, so the next rate covers both.
+    const next = liveFeedReducer(liveFeedReducer(first, stats(1010, 0.2)), stats(1040, 2))
+    expect(next.rates).toEqual([{ at: T0 + 2000, value: 20 }])
+  })
+
+  it('gives no sample for stats without a receive time', () => {
+    const state = applyAll([
+      { type: 'stats', data: makeStats({ total_edits: 1 }) },
+      { type: 'stats', data: makeStats({ total_edits: 2 }) },
+    ])
+    expect(state.rates).toEqual([])
+    expect(state.lastCount).toBeNull()
+  })
+
+  it(`keeps at most ${MAX_RATE_SAMPLES} samples`, () => {
+    const readings = Array.from({ length: MAX_RATE_SAMPLES + 11 }, (_, index) => stats(index * 10, index * 2))
+    const state = readings.reduce(liveFeedReducer, initialFeedState)
+    expect(state.rates).toHaveLength(MAX_RATE_SAMPLES)
+    expect(state.rates.at(-1)).toEqual({ at: T0 + (MAX_RATE_SAMPLES + 10) * 2000, value: 5 })
+  })
+})
+
+describe('geo points', () => {
+  it('puts the newest geo message first', () => {
+    const state = applyAll([
+      { type: 'geo', data: makeGeo({ title: 'A', timestamp: '2026-11-25T21:00:00Z' }) },
+      { type: 'geo', data: makeGeo({ title: 'B', timestamp: '2026-11-25T21:00:05Z' }) },
+    ])
+    expect(state.geo.map((point) => point.title)).toEqual(['B', 'A'])
+  })
+
+  it('merges the snapshot from the api with the live points, without duplicates', () => {
+    const live = makeGeo({ title: 'Live', timestamp: '2026-11-25T21:00:10Z' })
+    const old = makeGeo({ title: 'Old', timestamp: '2026-11-25T20:59:00Z' })
+    const before = applyAll([{ type: 'geo', data: live }])
+    const state = liveFeedReducer(before, { type: 'geo_snapshot', data: [live, old] })
+    expect(state.geo.map((point) => point.title)).toEqual(['Live', 'Old'])
+  })
+
+  it('keeps a revert and an alert on the same article as two points', () => {
+    const revert = makeGeo()
+    const alert = makeGeo({ kind: 'alert', severity: 'high', alert_kind: 'revert_war' })
+    expect(applyAll([{ type: 'geo', data: revert }, { type: 'geo', data: alert }]).geo).toHaveLength(2)
+  })
+
+  it(`keeps at most ${MAX_GEO} points, the newest ones`, () => {
+    const points = Array.from({ length: MAX_GEO + 20 }, (_, index) =>
+      makeGeo({ title: `p${index}`, timestamp: new Date(Date.UTC(2026, 10, 25, 20, 0, index)).toISOString() }),
+    )
+    const state = liveFeedReducer(initialFeedState, { type: 'geo_snapshot', data: points })
+    expect(state.geo).toHaveLength(MAX_GEO)
+    expect(state.geo[0].title).toBe(`p${MAX_GEO + 19}`)
+  })
+
+  it('drops points without valid coordinates and sorts a bad timestamp last', () => {
+    const merged = mergeGeo(
+      [],
+      [
+        makeGeo({ title: 'no-time', timestamp: 'later' }),
+        makeGeo({ title: 'bad', lat: Number.NaN }),
+        makeGeo({ title: 'ok' }),
+      ],
+    )
+    expect(merged.map((point) => point.title)).toEqual(['ok', 'no-time'])
+  })
+})
+
 describe('parseMessage', () => {
+  it('parses a geo message', () => {
+    const geo = makeGeo()
+    expect(parseMessage(JSON.stringify({ type: 'geo', data: geo }))).toEqual({ type: 'geo', data: geo })
+  })
+
+  it('does not accept a snapshot from the WebSocket', () => {
+    expect(parseMessage(JSON.stringify({ type: 'geo_snapshot', data: {} }))).toBeNull()
+  })
+
   it('parses a valid message', () => {
     const edit = makeEdit()
     expect(parseMessage(JSON.stringify({ type: 'edit', data: edit }))).toEqual({ type: 'edit', data: edit })
