@@ -5,6 +5,11 @@ import type { Alert, EditEvent, GeoEvent, LiveMessage, RevertEvent, Stats } from
 export const MAX_EDITS = 50
 export const MAX_POINTS = 60
 export const MAX_GEO = 200
+// About 3 minutes of instantaneous rate samples, one per stats message (every ~2 s).
+export const MAX_RATE_SAMPLES = 90
+// Two stats closer than this (for example the REST answer and the first WebSocket
+// message) give a noisy rate, so the second one does not make a sample.
+export const MIN_RATE_INTERVAL_MS = 500
 
 // A row of the live list. "reverted" becomes true when a revert message names it.
 // "delta" is the size change in bytes, or null when the size is not known.
@@ -20,6 +25,30 @@ export interface FeedState {
   lastAlert: Alert | null
   // Points of the map, newest first.
   geo: GeoEvent[]
+  // Edits per second between two consecutive stats messages, oldest first.
+  rates: RatePoint[]
+  // The last counter reading that the rates start from.
+  lastCount: CounterReading | null
+}
+
+export interface RatePoint {
+  // Time of the sample, in milliseconds since the epoch.
+  at: number
+  value: number
+}
+
+export interface CounterReading {
+  total: number
+  at: number
+}
+
+// A stats message with the time the browser received it. The api's
+// edits_per_second is a 60 s average, so the dashboard computes its own
+// instantaneous rate from total_edits and this time.
+export interface TimedStatsAction {
+  type: 'stats'
+  data: Stats
+  at?: number
 }
 
 // The list from GET /api/geo/recent. It is not a WebSocket message: App dispatches it.
@@ -28,7 +57,7 @@ export interface GeoSnapshotAction {
   data: GeoEvent[]
 }
 
-export type FeedAction = LiveMessage | GeoSnapshotAction
+export type FeedAction = Exclude<LiveMessage, { type: 'stats' }> | TimedStatsAction | GeoSnapshotAction
 
 export const initialFeedState: FeedState = {
   edits: [],
@@ -36,6 +65,8 @@ export const initialFeedState: FeedState = {
   stats: null,
   lastAlert: null,
   geo: [],
+  rates: [],
+  lastCount: null,
 }
 
 const MESSAGE_TYPES = ['edit', 'revert', 'alert', 'stats', 'geo']
@@ -110,6 +141,26 @@ export function mergeGeo(current: GeoEvent[], incoming: GeoEvent[]): GeoEvent[] 
   return [...byKey.values()].sort((a, b) => timeOf(b) - timeOf(a)).slice(0, MAX_GEO)
 }
 
+// Adds one instantaneous rate sample from a new counter reading.
+// - The first reading only becomes the start point.
+// - A lower total means the api restarted: the reading becomes the new start point.
+// - A time difference below MIN_RATE_INTERVAL_MS (or zero) gives no sample.
+export function addRateSample(
+  state: Pick<FeedState, 'rates' | 'lastCount'>,
+  reading: CounterReading,
+): Pick<FeedState, 'rates' | 'lastCount'> {
+  const last = state.lastCount
+  if (last === null || reading.total < last.total) {
+    return { rates: state.rates, lastCount: reading }
+  }
+  const elapsed = reading.at - last.at
+  if (elapsed < MIN_RATE_INTERVAL_MS) {
+    return state
+  }
+  const value = ((reading.total - last.total) * 1000) / elapsed
+  return { rates: [...state.rates, { at: reading.at, value }].slice(-MAX_RATE_SAMPLES), lastCount: reading }
+}
+
 export function liveFeedReducer(state: FeedState, message: FeedAction): FeedState {
   switch (message.type) {
     case 'edit': {
@@ -138,12 +189,18 @@ export function liveFeedReducer(state: FeedState, message: FeedAction): FeedStat
     }
     case 'alert':
       return { ...state, lastAlert: message.data }
-    case 'stats':
-      return {
+    case 'stats': {
+      const next = {
         ...state,
         stats: message.data,
         throughput: [...state.throughput, message.data.edits_per_second].slice(-MAX_POINTS),
       }
+      // Without a receive time there is no rate sample (for example in old tests).
+      if (message.at === undefined) {
+        return next
+      }
+      return { ...next, ...addRateSample(state, { total: message.data.total_edits, at: message.at }) }
+    }
     case 'geo':
       return { ...state, geo: mergeGeo(state.geo, [message.data]) }
     case 'geo_snapshot':

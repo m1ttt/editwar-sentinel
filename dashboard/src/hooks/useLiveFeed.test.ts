@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeEdit } from '../test/fixtures'
+import { makeEdit, makeStats } from '../test/fixtures'
 import { backoffDelay, liveFeedUrl, MAX_BACKOFF_MS, useLiveFeed } from './useLiveFeed'
 
 // A minimal WebSocket double. Tests call open(), receive() and drop() on it.
@@ -61,6 +61,17 @@ describe('backoffDelay', () => {
 })
 
 describe('useLiveFeed', () => {
+  it('stamps stats messages with the receive time, so the rate can be computed', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.UTC(2026, 10, 25, 21, 0, 0))
+    const { result } = renderHook(() => useLiveFeed('ws://test/ws/live'))
+    act(() => latest().open())
+    act(() => latest().receive(JSON.stringify({ type: 'stats', data: makeStats({ total_edits: 100 }) })))
+    vi.setSystemTime(Date.UTC(2026, 10, 25, 21, 0, 2))
+    act(() => latest().receive(JSON.stringify({ type: 'stats', data: makeStats({ total_edits: 130 }) })))
+    expect(result.current.rates).toEqual([{ at: Date.UTC(2026, 10, 25, 21, 0, 2), value: 15 }])
+  })
+
   it('connects, reports the status and applies messages', () => {
     const { result } = renderHook(() => useLiveFeed('ws://test/ws/live'))
     expect(result.current.status).toBe('connecting')

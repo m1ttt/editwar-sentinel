@@ -5,9 +5,12 @@ import {
   initialFeedState,
   liveFeedReducer,
   MAX_EDITS,
+  addRateSample,
   MAX_GEO,
   MAX_POINTS,
+  MAX_RATE_SAMPLES,
   mergeGeo,
+  MIN_RATE_INTERVAL_MS,
   parseMessage,
   type FeedState,
 } from './liveFeedReducer'
@@ -135,6 +138,60 @@ describe('liveFeedReducer', () => {
   it('returns the same state for an unknown message type', () => {
     const unknown = { type: 'other', data: {} } as unknown as LiveMessage
     expect(liveFeedReducer(initialFeedState, unknown)).toBe(initialFeedState)
+  })
+})
+
+describe('instantaneous rate', () => {
+  const T0 = Date.UTC(2026, 10, 25, 21, 0, 0)
+
+  function stats(total: number, seconds: number) {
+    return { type: 'stats' as const, data: makeStats({ total_edits: total }), at: T0 + seconds * 1000 }
+  }
+
+  it('uses the first reading only as the start point', () => {
+    const state = liveFeedReducer(initialFeedState, stats(1000, 0))
+    expect(state.rates).toEqual([])
+    expect(state.lastCount).toEqual({ total: 1000, at: T0 })
+  })
+
+  it('divides the new edits by the time between two readings', () => {
+    const state = [stats(1000, 0), stats(1030, 2), stats(1040, 4)].reduce(liveFeedReducer, initialFeedState)
+    expect(state.rates).toEqual([
+      { at: T0 + 2000, value: 15 },
+      { at: T0 + 4000, value: 5 },
+    ])
+  })
+
+  it('starts again after a counter reset (api restart)', () => {
+    const state = [stats(5000, 0), stats(5020, 2), stats(10, 4), stats(30, 6)].reduce(liveFeedReducer, initialFeedState)
+    expect(state.rates.map((point) => point.value)).toEqual([10, 10])
+    expect(state.lastCount).toEqual({ total: 30, at: T0 + 6000 })
+  })
+
+  it('skips a reading with no time difference or one that is too close', () => {
+    const first = liveFeedReducer(initialFeedState, stats(1000, 0))
+    expect(liveFeedReducer(first, stats(1010, 0)).rates).toEqual([])
+    const close = addRateSample(first, { total: 1010, at: T0 + MIN_RATE_INTERVAL_MS - 1 })
+    expect(close).toBe(first)
+    // The skipped reading does not move the start point, so the next rate covers both.
+    const next = liveFeedReducer(liveFeedReducer(first, stats(1010, 0.2)), stats(1040, 2))
+    expect(next.rates).toEqual([{ at: T0 + 2000, value: 20 }])
+  })
+
+  it('gives no sample for stats without a receive time', () => {
+    const state = applyAll([
+      { type: 'stats', data: makeStats({ total_edits: 1 }) },
+      { type: 'stats', data: makeStats({ total_edits: 2 }) },
+    ])
+    expect(state.rates).toEqual([])
+    expect(state.lastCount).toBeNull()
+  })
+
+  it(`keeps at most ${MAX_RATE_SAMPLES} samples`, () => {
+    const readings = Array.from({ length: MAX_RATE_SAMPLES + 11 }, (_, index) => stats(index * 10, index * 2))
+    const state = readings.reduce(liveFeedReducer, initialFeedState)
+    expect(state.rates).toHaveLength(MAX_RATE_SAMPLES)
+    expect(state.rates.at(-1)).toEqual({ at: T0 + (MAX_RATE_SAMPLES + 10) * 2000, value: 5 })
   })
 })
 
