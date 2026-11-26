@@ -1,0 +1,90 @@
+# Creates an Application Insights release annotation (category "Deployment").
+# The portal draws it as a marker on the Performance and Failures charts and on
+# workbook time charts, so a change in errors or latency can be matched with
+# the deploy that caused it.
+#
+# Documented call (learn.microsoft.com, "Release annotations"):
+#   PUT https://management.azure.com<component id>/Annotations?api-version=2015-05-01
+#   body: Id, AnnotationName, EventTime (UTC), Category "Deployment",
+#         Properties (a JSON object serialized as a string)
+#
+# Needs an "az login" session whose identity has
+# Microsoft.Insights/Components/Annotations/Write on the component
+# (infra/terraform/identity.tf). Callers should set continue-on-error: true:
+# a missing annotation must never fail a deploy.
+name: App Insights release annotation
+description: Marks a deployment on the Application Insights component of an environment.
+
+inputs:
+  pipeline:
+    description: Name of the pipeline that deployed (backend or frontend). Prefix of the annotation name.
+    required: true
+  environment:
+    description: Environment key (dev or prod). Selects the component appi-<project>-<environment>.
+    required: true
+  version:
+    description: Deployed version (sha-<commit>).
+    required: true
+  subscription-id:
+    description: Azure subscription ID (vars.AZURE_SUBSCRIPTION_ID).
+    required: true
+  resource-group:
+    description: Resource group of the project (vars.AKS_RESOURCE_GROUP, rg-<project>).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Create the annotation
+      shell: bash
+      env:
+        PIPELINE: ${{ inputs.pipeline }}
+        DEPLOY_ENV: ${{ inputs.environment }}
+        VERSION: ${{ inputs.version }}
+        SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        RESOURCE_GROUP: ${{ inputs.resource-group }}
+      run: |
+        set -euo pipefail
+        # The component ID follows the Terraform naming convention
+        # (main.tf: rg-<project>, monitoring.tf: appi-<project>-<env>), so no
+        # extra repository variable or read permission on the component is needed.
+        case "$RESOURCE_GROUP" in
+          rg-?*) PROJECT="${RESOURCE_GROUP#rg-}" ;;
+          *)
+            echo "::warning::Release annotation skipped: resource group '$RESOURCE_GROUP' does not follow the rg-<project> convention."
+            exit 1
+            ;;
+        esac
+        COMPONENT_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/microsoft.insights/components/appi-$PROJECT-$DEPLOY_ENV"
+        RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+        NAME="$PIPELINE $VERSION"
+
+        # jq builds both JSON documents, so quotes in any value are escaped.
+        PROPERTIES=$(jq -cn \
+          --arg release "$NAME" \
+          --arg commit "$GITHUB_SHA" \
+          --arg version "$VERSION" \
+          --arg env "$DEPLOY_ENV" \
+          --arg actor "$GITHUB_ACTOR" \
+          --arg run "$RUN_URL" \
+          --arg branch "$GITHUB_REF_NAME" \
+          --arg workflow "$GITHUB_WORKFLOW" \
+          '{ReleaseName: $release, Commit: $commit, Version: $version, Environment: $env,
+            Actor: $actor, WorkflowRunUrl: $run, SourceBranch: $branch, Workflow: $workflow}')
+        BODY=$(jq -cn \
+          --arg id "$(cat /proc/sys/kernel/random/uuid)" \
+          --arg name "$NAME" \
+          --arg time "$(date -u +%Y-%m-%dT%H:%M:%S)" \
+          --arg props "$PROPERTIES" \
+          '{Id: $id, AnnotationName: $name, EventTime: $time, Category: "Deployment", Properties: $props}')
+
+        echo "Annotation on $COMPONENT_ID"
+        echo "$BODY"
+        if ! az rest --method put \
+            --url "https://management.azure.com${COMPONENT_ID}/Annotations?api-version=2015-05-01" \
+            --headers "Content-Type=application/json" \
+            --body "$BODY" --output none; then
+          echo "::warning::Could not create the release annotation '$NAME' on appi-$PROJECT-$DEPLOY_ENV. The deploy itself succeeded. Check the annotation role in infra/terraform/identity.tf."
+          exit 1
+        fi
+        echo "Release annotation '$NAME' created on appi-$PROJECT-$DEPLOY_ENV."

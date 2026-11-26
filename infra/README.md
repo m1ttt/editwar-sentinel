@@ -15,7 +15,9 @@ Los manifiestos de Kubernetes de las aplicaciones están en `deploy/`. Los pipel
 | `terraform/aks.tf` | Clúster AKS y los namespaces `editwar-dev` y `editwar-prod`. |
 | `terraform/monitoring.tf` | Log Analytics, regla de recolección de Container Insights, Application Insights por ambiente, Secrets `editwar-telemetry` y `editwar-postgres`, grupo de acciones y alertas. |
 | `terraform/ingress.tf` | IP pública estática e ingress-nginx con Helm. |
-| `terraform/identity.tf` | App registration, service principal y credenciales federadas para GitHub Actions. Rol de usuario del clúster. |
+| `terraform/identity.tf` | App registration, service principal y credenciales federadas para GitHub Actions. Rol de usuario del clúster y rol para escribir anotaciones de release. |
+| `terraform/workbook.tf` | Azure Workbook compartido "EditWar Ops". |
+| `terraform/workbooks/editwar-ops.json.tftpl` | JSON del workbook. `templatefile()` inyecta los IDs de recursos. |
 | `terraform/outputs.tf` | URLs públicas y valores para las variables del repositorio en GitHub. |
 | `terraform/terraform.tfvars.example` | Ejemplo de `terraform.tfvars`, solo con valores de relleno. |
 | `terraform/backend.example.hcl` | Ejemplo de `backend.hcl` para el estado remoto. |
@@ -43,6 +45,8 @@ Los manifiestos de Kubernetes de las aplicaciones están en `deploy/`. Los pipel
 | Alertas de métricas | `alert-failed-requests-dev`, `alert-failed-requests-prod` | Se disparan con más de 5 requests fallidos en 5 minutos. |
 | App registration de Entra ID | `github-editwar-sentinel` | Identidad de GitHub Actions con federación OIDC. No tiene secretos. |
 | Asignación de rol | Azure Kubernetes Service Cluster User Role | Permite al pipeline obtener el kubeconfig y ejecutar `kubectl apply`. No permite cambiar recursos de Azure. |
+| Asignaciones para anotaciones | Application Insights Component Contributor en cada componente de Application Insights (por defecto) | Permite al pipeline crear anotaciones de release. Con `github_annotations_role = "custom"` se crea en su lugar el rol `EditWar Release Annotations Writer (editwar-sentinel)`, con solo `Components/Annotations/Read` y `Write`. |
+| Azure Workbook | `EditWar Ops` | Tablero compartido de dev y prod. Enlace en la salida `workbook_url`. Ver [Observabilidad](../docs/wiki/Observabilidad.md). |
 
 ### Por qué Kafka y PostgreSQL corren dentro del clúster
 
@@ -67,7 +71,7 @@ La IP se conoce solo después de `terraform apply`. El pipeline de despliegue no
 
 - Terraform 1.6 o más reciente.
 - Azure CLI con sesión iniciada en la suscripción del equipo: `az login`.
-- Permisos en la suscripción: Owner (o Contributor más User Access Administrator) para crear la asignación de rol.
+- Permisos en la suscripción: Owner (o Contributor más User Access Administrator) para crear las asignaciones de rol. El rol personalizado de anotaciones (`github_annotations_role = "custom"`) además necesita Owner o User Access Administrator, porque Role Based Access Control Administrator no puede crear definiciones de rol.
 - Permiso en Entra ID para registrar aplicaciones. Si el tenant de la universidad lo bloquea, use `create_github_identity = false` y cree la identidad OIDC con otra cuenta.
 
 ## Primer despliegue
@@ -137,6 +141,7 @@ Cree también los Environments `dev` y `prod`. En `prod`, agregue un revisor obl
 
 ## Dónde ver el monitoreo en el portal
 
+- Tablero central: workbook "EditWar Ops" (`terraform output -raw workbook_url`). Detalle en [Observabilidad](../docs/wiki/Observabilidad.md).
 - CPU y memoria de nodos y pods: AKS > Monitoring > Insights.
 - Requests, fallos y tiempos de respuesta: Application Insights > Performance y Failures.
 - Trazas distribuidas: Application Insights > Transaction search.
