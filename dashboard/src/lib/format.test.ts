@@ -36,5 +36,6 @@ describe('format helpers', () => {
       }),
     ).toBe('reverts: 4 · users: a, b · event_ids: 4 · wiki_wide: true')
     expect(summarizeEvidence(null)).toBe('')
+    expect(summarizeEvidence({ reverts: 2, timeline: [{ user: 'a' }], timeline_truncated: false })).toBe('reverts: 2')
   })
 })

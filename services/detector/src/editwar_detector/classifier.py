@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from editwar_detector.window import SlidingWindow
 from editwar_domain import EditEvent
@@ -31,6 +32,56 @@ DEFAULT_REVERT_PATTERNS = [
 ]
 
 
+# Summaries that name the author of the undone edit, followed by that user.
+# MediaWiki writes the user as a link ("[[Special:Contributions/X|X]]"), older
+# tools and some wikis as plain text ("X (talk)"). Summaries such as
+# "Restored revision N by X" or "Revert to revision N by X" are left out on
+# purpose: there X wrote the version that came back, not the one undone.
+_DIFF_OR_NUMBER = r"(?:\[\[[^\]]*\]\]|(?:edici[oó]n|revisi[oó]n)?\s*\d+)"
+_REVERTED_USER_LEADS = [
+    # English
+    r"\breverted (?:\d+ )?edits? by",  # rollback, Twinkle
+    r"\breverting (?:edit\(s\)|edits?) by",  # Huggle
+    rf"\bundid revision\s+{_DIFF_OR_NUMBER}\s+by",  # undo
+    # Spanish
+    r"\brevertidos los cambios de",  # rollback
+    rf"\bdeshecha la\s+{_DIFF_OR_NUMBER}\s+de",  # undo
+    r"\brevertid[oa]s? (?:\d+ )?(?:ediciones|edici[oó]n|cambios) de",
+]
+_USER = (
+    r"\s*(?:"
+    # [[Special:Contributions/X|X]] or [[Especial:Contribuciones/X|X]]
+    r"\[\[\s*(?:special|especial)\s*:\s*(?:contributions|contribuciones)/(?P<contrib>[^\]|]+)"
+    r"|\[\[\s*(?:user|usuario|usuaria)\s*:\s*(?P<page>[^\]|/]+)"  # [[User:X|X]]
+    # plain text, up to "(talk)", ": reason", "," or "to last revision"
+    r"|(?P<plain>[^\[\]()|,\s](?:[^\[\]()|,]*?[^\[\]()|,\s])?)"
+    r"(?=\s*\(|:\s|\s*,|\s*$|\s+to\s|\s+a\s+la\s)"
+    r")"
+)
+REVERTED_USER_PATTERNS = [re.compile(lead + _USER, re.IGNORECASE) for lead in _REVERTED_USER_LEADS]
+
+
+def reverted_user_from_comment(comment: str) -> str | None:
+    """Best-effort: the user whose edit a revert summary says was undone, or None."""
+    for pattern in REVERTED_USER_PATTERNS:
+        found = pattern.search(comment)
+        if found is None:
+            continue
+        name = found.group("contrib") or found.group("page") or found.group("plain")
+        name = name.replace("_", " ").strip()
+        if name:
+            return name
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class RevertMatch:
+    """Why an edit is a revert and, when known, whose edit it undid."""
+
+    reason: str  # REASON_COMMENT or REASON_SIZE_RESTORE
+    reverted_user: str | None = None
+
+
 class RevertClassifier:
     """Finds reverts with two signals: the edit summary and a size restore."""
 
@@ -42,15 +93,15 @@ class RevertClassifier:
         """True when the edit summary says that the edit is a revert."""
         return any(pattern.search(comment) for pattern in self.patterns)
 
-    def restores_size(self, event: EditEvent, window: SlidingWindow) -> bool:
-        """True when the edit brings the article back to the size it had before
-        an earlier edit by another user.
+    def restored_edit(self, event: EditEvent, window: SlidingWindow) -> EditEvent | None:
+        """The most recent earlier edit by another user that `event` undoes by size.
 
-        Both edits must change the size, so two typo fixes of the same length
-        are not a revert.
+        The edit undoes it when it brings the article back to the size it had
+        before that edit. Both edits must change the size, so two typo fixes
+        of the same length are not a revert.
         """
         if event.size_delta() == 0:
-            return False
+            return None
         for earlier in window.recent():
             if earlier.event_id == event.event_id:
                 continue
@@ -59,16 +110,36 @@ class RevertClassifier:
                 and earlier.size_delta() != 0
                 and earlier.old_len == event.new_len
             ):
-                return True
-        return False
+                return earlier
+        return None
+
+    def restores_size(self, event: EditEvent, window: SlidingWindow) -> bool:
+        """True when the edit brings the article back to the size it had before
+        an earlier edit by another user.
+        """
+        return self.restored_edit(event, window) is not None
+
+    def match(self, event: EditEvent, window: SlidingWindow) -> RevertMatch | None:
+        """Classify the edit and find whose edit it undid. None when it is not a revert.
+
+        For a comment revert the user comes from the summary; when the summary
+        does not name one, the size-restore match (if any) is used instead.
+        """
+        if self.matches_comment(event.comment):
+            user = reverted_user_from_comment(event.comment)
+            if user is None:
+                restored = self.restored_edit(event, window)
+                user = restored.user if restored is not None else None
+            return RevertMatch(REASON_COMMENT, user)
+        restored = self.restored_edit(event, window)
+        if restored is not None:
+            return RevertMatch(REASON_SIZE_RESTORE, restored.user)
+        return None
 
     def classify(self, event: EditEvent, window: SlidingWindow) -> str | None:
         """Return "comment", "size_restore" or None when the edit is not a revert."""
-        if self.matches_comment(event.comment):
-            return REASON_COMMENT
-        if self.restores_size(event, window):
-            return REASON_SIZE_RESTORE
-        return None
+        found = self.match(event, window)
+        return None if found is None else found.reason
 
     def is_revert(self, event: EditEvent, window: SlidingWindow) -> bool:
         return self.classify(event, window) is not None

@@ -46,6 +46,21 @@ describe('LiveFeedPanel', () => {
     expect(container.querySelector('.term-line')).toHaveClass('is-revert')
   })
 
+  it('links to the diff on Wikipedia only for edits that have one', () => {
+    const diff = 'https://en.wikipedia.org/w/index.php?diff=2&oldid=1'
+    const edits = [
+      { ...makeEdit({ event_id: 'a', title: 'Con diff', diff_url: diff }), reverted: false, delta: 1 },
+      { ...makeEdit({ event_id: 'b', title: 'Sin diff' }), reverted: false, delta: 1 },
+      { ...makeEdit({ event_id: 'c', title: 'Nueva', diff_url: diff, old_rev_id: 0 }), reverted: false, delta: 1 },
+    ]
+    render(<LiveFeedPanel edits={edits} />)
+    const links = screen.getAllByRole('link', { name: 'diff ↗' })
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', diff)
+    expect(links[0]).toHaveAttribute('target', '_blank')
+    expect(links[0].closest('li')).toHaveTextContent('Con diff')
+  })
+
   it('uses EDIT when the change type is empty', () => {
     expect(eventTag({ change_type: '' })).toBe('EDIT')
     expect(eventTag({ change_type: 'log' })).toBe('LOG')
@@ -55,10 +70,24 @@ describe('LiveFeedPanel', () => {
 describe('DisputedPanel', () => {
   it('ranks articles with links and relative bars', () => {
     const { container } = render(<DisputedPanel articles={makeStats().top_disputed} />)
-    expect(screen.getByRole('link', { name: 'Kubernetes' })).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Kubernetes')
+    expect(screen.getByRole('link', { name: 'Kubernetes' })).toHaveAttribute(
+      'href',
+      'https://en.wikipedia.org/wiki/Kubernetes',
+    )
     const bars = container.querySelectorAll<HTMLElement>('.bar i')
     expect(bars[0].style.width).toBe('100%')
     expect(bars[1].style.width).toBe('50%')
+  })
+
+  it('links to the history of each article', () => {
+    const [first, second] = makeStats().top_disputed
+    render(<DisputedPanel articles={[{ ...first, history_url: 'https://en.wikipedia.org/h' }, second]} />)
+    const links = screen.getAllByRole('link', { name: 'historial ↗' })
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      'https://en.wikipedia.org/h',
+      'https://es.wikipedia.org/w/index.php?title=Contenedor&action=history',
+    ])
+    expect(links[1]).toHaveAttribute('target', '_blank')
   })
 
   it('shows an empty state', () => {
