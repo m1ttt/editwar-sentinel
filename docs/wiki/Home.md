@@ -9,6 +9,7 @@ Materia: Infraestructura para el Desarrollo Continuo (O2026_ESI3905O), ITESO.
 - [Arquitectura](Arquitectura): componentes, clases, stack, infraestructura y despliegue.
 - [Pipelines y ramas](Pipelines-y-ramas): GitFlow, pipelines de backend, frontend e infraestructura.
 - [Guion de demo](Guion-de-demo): los pasos de la presentación final, en el orden de la rúbrica.
+- [Reporte](Reporte): arquitectura explicada, distribución de actividades, conclusiones y mejoras pendientes.
 - Propuesta original: [EditWar-Sentinel-Propuesta](https://github.com/m1ttt/editwar-sentinel/blob/main/docs/EditWar-Sentinel-Propuesta.md).
 - Cambios contra la propuesta: [Rubrica-vs-Propuesta](https://github.com/m1ttt/editwar-sentinel/blob/main/docs/Rubrica-vs-Propuesta.md).
 
