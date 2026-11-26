@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from editwar_ingestor.filters import EventFilter
-from editwar_ingestor.normalizer import EventNormalizer
+from editwar_ingestor.metrics import IngestorMetrics
+from editwar_ingestor.normalizer import EventNormalizer, InvalidEventError
 from editwar_ingestor.publisher import EventPublisher
 from editwar_ingestor.sources import EventSource
 
@@ -19,7 +20,8 @@ class IngestorService:
     """Read raw events, normalize and filter them, and publish the accepted ones.
 
     A bad event is logged and counted, and the loop goes on. The counters
-    always add up: received == published + filtered + errors.
+    always add up: received == published + filtered + errors. The metric
+    editwar.ingestor.events splits "filtered" into filtered and invalid.
     """
 
     def __init__(
@@ -28,11 +30,13 @@ class IngestorService:
         normalizer: EventNormalizer,
         event_filter: EventFilter,
         publisher: EventPublisher,
+        metrics: IngestorMetrics | None = None,
     ) -> None:
         self.source = source
         self.normalizer = normalizer
         self.filter = event_filter
         self.publisher = publisher
+        self.metrics = metrics or IngestorMetrics()
         self.received = 0
         self.published = 0
         self.filtered = 0  # unusable events and events the filter rejected
@@ -82,17 +86,25 @@ class IngestorService:
         """Process one raw event and update the counters."""
         self.received += 1
         try:
-            event = self.normalizer.parse(raw)
+            event = self.normalizer.normalize(raw)
             if event is None or not self.filter.accept(event):
                 self.filtered += 1
+                self.metrics.event("filtered")
                 return
             await self.publisher.publish(event)
+        except InvalidEventError as error:
+            self.filtered += 1
+            self.metrics.event("invalid")
+            logger.debug("skipping unusable event %s: %s", _raw_id(raw), error)
+            return
         except Exception:
             self.errors += 1
+            self.metrics.event("error")
             logger.exception("could not process event %s", _raw_id(raw))
             return
         self.published += 1
         self.last_event_id = event.event_id
+        self.metrics.published(event.timestamp)
 
     async def _consume(self) -> None:
         async for raw in self.source.events():

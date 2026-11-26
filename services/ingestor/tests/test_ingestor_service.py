@@ -68,10 +68,10 @@ class FailingPublisher(InMemoryPublisher):
 
 
 class ExplodingNormalizer(EventNormalizer):
-    def parse(self, raw: Any) -> EditEvent | None:
+    def normalize(self, raw: Any) -> EditEvent | None:
         if raw.get("explode"):
-            raise ValueError("boom")
-        return super().parse(raw)
+            raise RuntimeError("boom")
+        return super().normalize(raw)
 
 
 def make_service(source: EventSource, publisher: InMemoryPublisher) -> IngestorService:

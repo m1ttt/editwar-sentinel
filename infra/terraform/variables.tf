@@ -255,6 +255,17 @@ variable "node_usage_threshold_percent" {
   }
 }
 
+variable "workbook_display_name" {
+  description = "Display name of the shared Azure Monitor workbook (workbook.tf)."
+  type        = string
+  default     = "EditWar Ops"
+
+  validation {
+    condition     = length(trimspace(var.workbook_display_name)) > 0 && length(var.workbook_display_name) <= 128
+    error_message = "workbook_display_name must be 1-128 characters."
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Ingress
 # ---------------------------------------------------------------------------
@@ -306,6 +317,17 @@ variable "create_github_identity" {
   description = "Create the Entra app registration and federated credentials for GitHub Actions. Set false if the tenant blocks app registrations."
   type        = bool
   default     = true
+}
+
+variable "github_annotations_role" {
+  description = "How the GitHub Actions identity gets permission to write release annotations: \"custom\" creates a role with only the annotation actions (needs Microsoft.Authorization/roleDefinitions/write, for example Owner or User Access Administrator); \"builtin\" uses Application Insights Component Contributor (broader, but needs no custom role); \"none\" grants nothing and the pipelines skip the annotation with a warning."
+  type        = string
+  default     = "builtin"
+
+  validation {
+    condition     = contains(["custom", "builtin", "none"], var.github_annotations_role)
+    error_message = "github_annotations_role must be \"custom\", \"builtin\" or \"none\"."
+  }
 }
 
 variable "github_subject_prefix" {

@@ -21,6 +21,8 @@ La propuesta de octubre limitó el alcance a un clúster local k3d, sin nube. La
 | URL pública en Prod | No existía | `editwar.<ip>.nip.io` sobre la IP estática del ingress | salida `prod_url` de Terraform |
 | APM: trazas, errores y mensajes | No existía | Application Insights por ambiente con OpenTelemetry. Endpoints `/api/debug/error` y `/api/debug/log` para la demo | `libs/domain/src/editwar_domain/telemetry.py` |
 | Métricas de CPU, memoria y requests en el portal | No existía | Container Insights en AKS y métricas de requests de Application Insights | `infra/terraform/aks.tf`, `monitoring.tf` |
+| Tablero centralizado | No existía | Azure Workbook "EditWar Ops" con Terraform: estado, negocio, aplicación, pipeline de datos, clúster y logs, con selector de ambiente | `infra/terraform/workbook.tf`, `docs/wiki/Observabilidad.md` |
+| Marcas de despliegue | No existía | Anotación de release en Application Insights después de cada smoke test de dev y prod, visible en Performance, Failures y el tablero | `.github/actions/app-insights-annotation/`, `infra/terraform/identity.tf` |
 | Cambio visible en Prod | No existía | `GET /api/version` y el encabezado del dashboard muestran el commit desplegado | `services/api`, `dashboard` |
 
 ## Decisiones

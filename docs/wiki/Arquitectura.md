@@ -101,3 +101,24 @@ Kafka y PostgreSQL corren dentro del clúster como StatefulSets. Los equivalente
 - Requests, fallos y tiempos de respuesta: Application Insights > Performance y Failures.
 - Trazas distribuidas: Application Insights > Transaction search.
 - Mensajes de log: Application Insights > Logs, tabla `traces`.
+
+## Métricas
+
+Cada servicio publica métricas de negocio con la API de métricas de OpenTelemetry. Los instrumentos de cada servicio viven en una sola clase (`IngestorMetrics`, `DetectorMetrics`, `ApiMetrics`) que obtiene su `Meter` con `editwar_domain.metrics.get_meter()`. Con `APPLICATIONINSIGHTS_CONNECTION_STRING`, el distro de Azure Monitor las exporta cada 60 s (`OTEL_METRIC_EXPORT_INTERVAL`) a la tabla `customMetrics` de Application Insights. Sin esa variable (pruebas, Docker Compose) el proveedor global es un no-op: no cuestan nada y nunca fallan.
+
+| Métrica | Tipo | Atributos | Significado |
+|---|---|---|---|
+| `editwar.ingestor.events` | Counter | `outcome`: `published`, `filtered`, `invalid`, `error` | Un conteo por evento crudo leído de la fuente. `filtered`: no es una edición (log, categorize, canary) o el filtro la rechazó; `invalid`: le faltan campos o están mal; `error`: excepción, por ejemplo Kafka no aceptó el evento |
+| `editwar.ingestor.stream_reconnects` | Counter | `source`: `sse`, `replay` | Reconexiones del stream SSE, o nuevas pasadas del archivo de replay |
+| `editwar.ingestor.event_lag_seconds` | Histogram (s) | ninguno | Ahora (UTC) menos la hora de la edición, solo para eventos publicados |
+| `editwar.detector.edits_processed` | Counter | ninguno | Ediciones procesadas por el motor |
+| `editwar.detector.reverts` | Counter | `reason`: `comment`, `size_restore` | Reverts detectados y publicados en `wiki.reverts` |
+| `editwar.detector.alerts` | Counter | `kind` (tipo de regla), `severity`: `low`, `medium`, `high` | Alertas publicadas |
+| `editwar.detector.processing_seconds` | Histogram (s) | ninguno | Tiempo de procesar una edición, incluido el envío de su revert y sus alertas |
+| `editwar.detector.consumer_lag` | ObservableGauge (`{message}`) | ninguno | Mensajes de `wiki.edits` pendientes en las particiones del pod (high-water mark menos posición), calculado después de cada lote. La suma de todos los pods es el lag del grupo `detector` con el que escala KEDA |
+| `editwar.detector.open_windows` | ObservableGauge | ninguno | Ventanas deslizantes en memoria (artículos y wikis) |
+| `editwar.api.websocket_clients` | ObservableGauge | ninguno | Dashboards conectados a `/ws/live` en la réplica |
+| `editwar.api.alerts_stored` | Counter | `kind`, `outcome`: `stored`, `duplicate` | Alertas leídas de `wiki.alerts`: guardadas o ignoradas porque el id ya existía |
+| `editwar.api.diff_requests` | Counter | `outcome`: `cache_hit`, `fetched`, `bad_request`, `not_found`, `upstream_error` | Llamadas a `GET /api/diff`. `bad_request` incluye host no permitido, ids inválidos y página nueva sin revisión anterior |
+
+Los atributos solo toman pocos valores. Títulos de artículos, usuarios, wikis e ids nunca son atributos: cada valor distinto crearía una serie de tiempo nueva en Application Insights.

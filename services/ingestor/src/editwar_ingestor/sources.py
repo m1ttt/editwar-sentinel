@@ -19,6 +19,7 @@ import httpx
 from httpx_sse import SSEError, aconnect_sse
 
 from editwar_domain.settings import DEFAULT_STREAM_URL
+from editwar_ingestor.metrics import IngestorMetrics
 
 logger = logging.getLogger("editwar.ingestor.sources")
 
@@ -61,6 +62,7 @@ class WikimediaSSESource(EventSource):
         max_backoff: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: SleepFunction = asyncio.sleep,
+        metrics: IngestorMetrics | None = None,
     ) -> None:
         self.url = url
         self.last_event_id = last_event_id  # the SSE "id" field, sent back on reconnect
@@ -70,6 +72,7 @@ class WikimediaSSESource(EventSource):
         self.reconnects = 0
         self._transport = transport  # tests inject httpx.MockTransport here
         self._sleep = sleep  # tests inject a fake sleep here
+        self._metrics = metrics or IngestorMetrics()
         self._client: httpx.AsyncClient | None = None
 
     async def connect(self) -> None:
@@ -97,6 +100,7 @@ class WikimediaSSESource(EventSource):
     async def reconnect(self) -> None:
         """Wait for the current backoff before the next attempt, then double it (with a cap)."""
         self.reconnects += 1
+        self._metrics.reconnect("sse")
         logger.info("reconnecting in %.1f s (Last-Event-ID=%s)", self.backoff, self.last_event_id)
         await self._sleep(self.backoff)
         self.backoff = min(self.backoff * 2, self.max_backoff)
@@ -146,12 +150,14 @@ class ReplayFileSource(EventSource):
         *,
         loop: bool = True,
         sleep: SleepFunction = asyncio.sleep,
+        metrics: IngestorMetrics | None = None,
     ) -> None:
         self.path = Path(path)
         self.speed = speed
         self.loop = loop
         self.passes = 0  # how many times the whole file was replayed
         self._sleep = sleep
+        self._metrics = metrics or IngestorMetrics()
 
     async def connect(self) -> None:
         """Check that the file exists."""
@@ -180,6 +186,8 @@ class ReplayFileSource(EventSource):
                 return
             if not self.loop:
                 return
+            # A new pass is the replay counterpart of a stream reconnection.
+            self._metrics.reconnect("replay")
             logger.info("replay file finished pass %d, starting again", self.passes)
 
     async def close(self) -> None:

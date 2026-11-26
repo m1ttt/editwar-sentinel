@@ -72,6 +72,16 @@ output "application_insights_names" {
   value       = { for env, appi in azurerm_application_insights.env : env => appi.name }
 }
 
+output "workbook_id" {
+  description = "Resource ID of the shared \"EditWar Ops\" workbook."
+  value       = azurerm_application_insights_workbook.ops.id
+}
+
+output "workbook_url" {
+  description = "Azure portal link that opens the \"EditWar Ops\" workbook."
+  value       = "https://portal.azure.com/#@${var.tenant_id}/resource${azurerm_application_insights_workbook.ops.id}/workbook"
+}
+
 output "kubeconfig_command" {
   description = "Command that writes the kubeconfig for this cluster."
   value       = "az aks get-credentials --subscription ${var.subscription_id} --resource-group ${azurerm_resource_group.main.name} --name ${azurerm_kubernetes_cluster.main.name}"

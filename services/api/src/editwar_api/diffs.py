@@ -8,6 +8,9 @@ the api asks for it:
 `server_url` comes from the client, so it is checked against the Wikimedia
 hosts before any request (no SSRF). A diff between two revisions never changes,
 so successful answers stay in an LRU cache.
+
+Every call of DiffService.diff is counted in editwar.api.diff_requests with
+its outcome (see editwar_api.metrics).
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from editwar_api.geo import USER_AGENT
+from editwar_api.metrics import ApiMetrics, DiffOutcome
 
 logger = logging.getLogger("editwar.api")
 
@@ -38,6 +42,7 @@ class DiffError(Exception):
     """A diff that cannot be returned. `status_code` is the HTTP answer of the api."""
 
     status_code = 500
+    outcome: DiffOutcome = "upstream_error"  # the metric outcome of this error
 
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
@@ -46,22 +51,26 @@ class DiffError(Exception):
 
 class InvalidRequestError(DiffError):
     status_code = 400
+    outcome: DiffOutcome = "bad_request"
 
 
 class NewPageError(DiffError):
     status_code = 422
+    outcome: DiffOutcome = "bad_request"
 
 
 class RevisionNotFoundError(DiffError):
     """MediaWiki answered with an "error" object, for example nosuchrevid."""
 
     status_code = 404
+    outcome: DiffOutcome = "not_found"
 
 
 class UpstreamError(DiffError):
     """The Wikipedia API did not answer, timed out or sent something unexpected."""
 
     status_code = 502
+    outcome: DiffOutcome = "upstream_error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,14 +127,28 @@ class DiffService:
         client: httpx.AsyncClient | None = None,
         cache_size: int = 256,
         concurrency: int = 4,
+        metrics: ApiMetrics | None = None,
     ) -> None:
         self._client = client or httpx.AsyncClient(timeout=5.0, headers={"User-Agent": USER_AGENT})
         self._cache: OrderedDict[tuple[str, int, int], Diff] = OrderedDict()
         self._cache_size = cache_size
         self._limit = asyncio.Semaphore(concurrency)  # polite to the Wikipedia API
+        self._metrics = metrics or ApiMetrics()
 
     async def diff(self, server_url: str, rev_id: int, old_rev_id: int) -> Diff:
         """The diff from `old_rev_id` to `rev_id`. Raises a DiffError subclass."""
+        try:
+            found, outcome = await self._diff(server_url, rev_id, old_rev_id)
+        except DiffError as error:
+            self._metrics.diff(error.outcome)
+            raise
+        self._metrics.diff(outcome)
+        return found
+
+    async def _diff(
+        self, server_url: str, rev_id: int, old_rev_id: int
+    ) -> tuple[Diff, DiffOutcome]:
+        """The diff and where it came from: "cache_hit" or "fetched"."""
         if not is_allowed_server(server_url):
             raise InvalidRequestError("server_url must be a Wikimedia https host")
         if rev_id <= 0 or old_rev_id < 0:
@@ -136,7 +159,7 @@ class DiffService:
         cached = self._cache.get(key)
         if cached is not None:
             self._cache.move_to_end(key)
-            return cached
+            return cached, "cache_hit"
         params = {
             "action": "compare",
             "fromrev": str(old_rev_id),
@@ -157,7 +180,7 @@ class DiffService:
         self._cache[key] = result
         if len(self._cache) > self._cache_size:
             self._cache.popitem(last=False)
-        return result
+        return result, "fetched"
 
     async def close(self) -> None:
         await self._client.aclose()

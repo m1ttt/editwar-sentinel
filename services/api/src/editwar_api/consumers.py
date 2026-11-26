@@ -23,6 +23,7 @@ from aiokafka import AIOKafkaConsumer
 from opentelemetry import trace
 
 from editwar_api.geo import GeoPoint, GeoService
+from editwar_api.metrics import ApiMetrics
 from editwar_api.repositories import AlertRepository
 from editwar_api.stats import StatsService, page_url
 from editwar_api.websocket import WebSocketHub
@@ -110,9 +111,12 @@ class AlertConsumer:
     LiveConsumer sends the alert to the dashboards of every replica.
     """
 
-    def __init__(self, alerts: AlertRepository, hub: WebSocketHub) -> None:
+    def __init__(
+        self, alerts: AlertRepository, hub: WebSocketHub, metrics: ApiMetrics | None = None
+    ) -> None:
         self._alerts = alerts
         self._hub = hub
+        self._metrics = metrics or ApiMetrics()
         self.connected = False
 
     def _set_connected(self, value: bool) -> None:
@@ -127,8 +131,10 @@ class AlertConsumer:
             span.set_attribute("editwar.alert_id", str(alert.id))
             stored = await self._alerts.create(alert)
             if stored is None:
+                self._metrics.alert(alert.kind, "duplicate")
                 logger.info("duplicate alert %s ignored", alert.id)
                 return False
+            self._metrics.alert(alert.kind, "stored")
             logger.info(
                 "alert %s stored: %s on %s %s",
                 alert.id,

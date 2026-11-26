@@ -61,6 +61,8 @@ class FakeConsumer:
         self.batches = list(batches)
         self.service = service
         self.commit_error = commit_error
+        self.highwaters = {}  # TopicPartition -> high-water mark (None = not fetched yet)
+        self.positions = {}  # TopicPartition -> next offset to read
 
     async def start(self):
         self.log.append(("consumer.start",))
@@ -78,6 +80,18 @@ class FakeConsumer:
         if self.commit_error is not None:
             raise self.commit_error
         self.log.append(("commit", {tp.partition: off for tp, off in offsets.items()}))
+
+    def assignment(self):
+        return set(self.highwaters)
+
+    def highwater(self, partition):
+        return self.highwaters[partition]
+
+    async def position(self, partition):
+        position = self.positions[partition]
+        if isinstance(position, Exception):
+            raise position
+        return position
 
 
 def rules():

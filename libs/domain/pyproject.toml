@@ -3,7 +3,8 @@ name = "editwar-domain"
 version = "1.2.0"
 description = "Shared domain model, topic names and settings for EditWar Sentinel."
 requires-python = ">=3.12"
-dependencies = []
+# opentelemetry-api: the metrics module. Without an SDK it is a no-op.
+dependencies = ["opentelemetry-api>=1.27"]
 
 [project.optional-dependencies]
 telemetry = ["azure-monitor-opentelemetry>=1.6"]

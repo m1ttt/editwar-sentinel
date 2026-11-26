@@ -24,6 +24,7 @@ from editwar_domain.settings import (
 from editwar_domain.telemetry import configure_telemetry
 from editwar_ingestor.filters import EventFilter
 from editwar_ingestor.health import HealthServer
+from editwar_ingestor.metrics import IngestorMetrics
 from editwar_ingestor.normalizer import EventNormalizer
 from editwar_ingestor.publisher import EventPublisher, KafkaEventPublisher
 from editwar_ingestor.service import IngestorService
@@ -61,12 +62,12 @@ def load_settings() -> IngestorSettings:
     )
 
 
-def build_source(settings: IngestorSettings) -> EventSource:
+def build_source(settings: IngestorSettings, metrics: IngestorMetrics | None = None) -> EventSource:
     """Create the live stream source or the replay source."""
     if settings.event_source == "sse":
-        return WikimediaSSESource(settings.stream_url)
+        return WikimediaSSESource(settings.stream_url, metrics=metrics)
     if settings.event_source == "replay":
-        return ReplayFileSource(settings.replay_path, settings.replay_speed)
+        return ReplayFileSource(settings.replay_path, settings.replay_speed, metrics=metrics)
     raise ValueError(f"EVENT_SOURCE must be 'sse' or 'replay', not {settings.event_source!r}")
 
 
@@ -104,9 +105,10 @@ async def serve(
     source: EventSource,
     publisher: EventPublisher,
     stop_event: asyncio.Event,
+    metrics: IngestorMetrics | None = None,
 ) -> IngestorService:
     """Run the health server and the ingestor until the source ends or stop_event is set."""
-    service = IngestorService(source, EventNormalizer(), build_filter(settings), publisher)
+    service = IngestorService(source, EventNormalizer(), build_filter(settings), publisher, metrics)
     # Start the health server first, so the probes pass while Kafka is still starting.
     health = HealthServer(service.stats, port=settings.health_port)
     await health.start()
@@ -137,9 +139,10 @@ async def run_from_environment() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop_event.set)
     logger.info("starting ingestor with source=%s", settings.event_source)
-    source = build_source(settings)
+    metrics = IngestorMetrics()  # one per process, shared by the source and the service
+    source = build_source(settings, metrics)
     publisher = KafkaEventPublisher(settings.kafka_bootstrap)
-    await serve(settings, source, publisher, stop_event)
+    await serve(settings, source, publisher, stop_event, metrics)
 
 
 def main() -> None:
