@@ -1,0 +1,32 @@
+[project]
+name = "editwar-api"
+version = "1.0.0"
+description = "REST and WebSocket API: rules CRUD, alerts, stats and live feed."
+requires-python = ">=3.12"
+dependencies = [
+    "editwar-domain[telemetry]",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "aiokafka>=0.11",
+    "opentelemetry-api>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+]
+
+[project.optional-dependencies]
+test = ["aiosqlite>=0.20", "httpx>=0.27"]
+
+[project.scripts]
+editwar-api = "editwar_api.main:main"
+
+[tool.uv.sources]
+editwar-domain = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/editwar_api"]

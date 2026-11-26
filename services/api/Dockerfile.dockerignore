@@ -1,0 +1,15 @@
+# Used by `docker build -f services/api/Dockerfile .` (BuildKit reads <Dockerfile>.dockerignore).
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/node_modules
+.git
+dashboard
+deploy
+infra
+docs
+data

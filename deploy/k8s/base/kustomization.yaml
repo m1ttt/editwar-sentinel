@@ -1,0 +1,37 @@
+# Base manifests shared by every environment. Overlays change only what differs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Added to every object, but not to selectors (selectors are immutable).
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: editwar-sentinel
+    includeSelectors: false
+
+resources:
+  - kafka.yaml
+  - kafka-topics-job.yaml
+  - postgres.yaml
+  - api.yaml
+  - detector.yaml
+  - ingestor.yaml
+  - dashboard.yaml
+  - ingress.yaml
+
+# Shared environment for ingestor, detector and api.
+# The generator adds a hash suffix to the name, so any change here restarts the pods.
+configMapGenerator:
+  - name: editwar-config
+    literals:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_ENABLED=true
+      - API_URL=http://api:8000
+      - RULES_REFRESH_SECONDS=30
+      - EVENT_SOURCE=sse
+      - WIKIMEDIA_STREAM_URL=https://stream.wikimedia.org/v2/stream/recentchange
+      - REPLAY_PATH=/data/replay.jsonl
+      - REPLAY_SPEED=1.0
+      - LOG_LEVEL=INFO
+      - SERVICE_VERSION=dev
+      - ENVIRONMENT=local
+      - ENABLE_DEBUG_ENDPOINTS=false

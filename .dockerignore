@@ -1,0 +1,36 @@
+# Build context for services/*/Dockerfile is the repo root.
+# Keep: pyproject.toml, uv.lock, .python-version, libs/, services/, data/replay.jsonl.
+
+# Version control and CI
+.git
+.github
+
+# Local environments and caches
+.venv
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Coverage and test reports
+**/.coverage
+**/.coverage.*
+**/coverage.xml
+**/htmlcov
+**/junit*.xml
+
+# Parts with their own build or no place in a Python image
+dashboard
+infra
+deploy
+docs
+scripts
+
+# Local secrets
+.env
+.env.*
+**/*.tfstate*
+kubeconfig*
+.DS_Store

@@ -1,0 +1,42 @@
+%% Flujo de CI/CD de EditWar Sentinel hacia Azure
+flowchart LR
+    dev([Desarrollador])
+
+    subgraph gh["GitHub"]
+        repo[Repositorio<br/>m1ttt/editwar-sentinel]
+        subgraph actions["GitHub Actions"]
+            ci[CI<br/>ruff, mypy, pytest<br/>cobertura >= 80 %]
+            build[Build y push<br/>4 imágenes]
+            deployDev[deploy-dev<br/>Environment dev]
+            approval{Aprobación manual<br/>Environment prod}
+            deployProd[deploy-prod<br/>Environment prod]
+        end
+    end
+
+    hub[(Docker Hub<br/>m1ttt/editwar-*)]
+
+    subgraph azure["Azure"]
+        entra[Entra ID<br/>federación OIDC<br/>sin secretos]
+        subgraph aks["AKS aks-editwar-sentinel"]
+            nsDev[namespace<br/>editwar-dev]
+            nsProd[namespace<br/>editwar-prod]
+        end
+        appiDev[Application Insights<br/>dev]
+        appiProd[Application Insights<br/>prod]
+        ci2[Container Insights<br/>Log Analytics]
+    end
+
+    url([URL pública<br/>http://editwar.&lt;ip&gt;.nip.io])
+
+    dev -- push / pull request --> repo --> ci --> build --> hub
+    build --> deployDev
+    deployDev -- token OIDC --> entra
+    deployDev -- kubectl apply -k --> nsDev
+    deployDev --> approval --> deployProd
+    deployProd -- token OIDC --> entra
+    deployProd -- kubectl apply -k --> nsProd
+    hub -. pull de imágenes .-> nsDev & nsProd
+    nsDev -. telemetría .-> appiDev
+    nsProd -. telemetría .-> appiProd
+    aks -. CPU, memoria, logs .-> ci2
+    nsProd --> url

@@ -1,0 +1,9 @@
+# BuildKit reads this file instead of the root .dockerignore when the build
+# uses services/ingestor/Dockerfile. Send only what the image needs.
+**
+!libs/domain/pyproject.toml
+!libs/domain/src/**
+!services/ingestor/pyproject.toml
+!services/ingestor/src/**
+!data/replay.jsonl
+**/__pycache__
