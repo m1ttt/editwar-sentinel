@@ -1,4 +1,9 @@
-"""Turn raw Wikimedia recentchange events into EditEvent objects."""
+"""Turn raw Wikimedia recentchange events into EditEvent objects.
+
+normalize() tells two cases apart, which the metrics count separately:
+None for an event that is fine but is not an edit (log, categorize, canary),
+and InvalidEventError for an event with missing or broken fields.
+"""
 
 from __future__ import annotations
 
@@ -14,16 +19,30 @@ logger = logging.getLogger("editwar.ingestor.normalizer")
 SUPPORTED_TYPES = ("edit", "new")
 
 
+class InvalidEventError(ValueError):
+    """A raw event that looks like an edit but has missing or broken fields."""
+
+
 class EventNormalizer:
     """Map the raw recentchange JSON to the shared EditEvent model."""
 
     def parse(self, raw: Any) -> EditEvent | None:
         """Return an EditEvent, or None when the raw event is not a usable edit."""
         try:
+            return self.normalize(raw)
+        except InvalidEventError as exc:
+            logger.debug("skipping unusable event: %r", exc.__cause__)
+            return None
+
+    def normalize(self, raw: Any) -> EditEvent | None:
+        """Return an EditEvent, or None when the event is not an edit.
+
+        Raises InvalidEventError when the event cannot be read.
+        """
+        try:
             return self._parse(raw)
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
-            logger.debug("skipping unusable event: %r", exc)
-            return None
+            raise InvalidEventError(str(exc)) from exc
 
     def _parse(self, raw: dict[str, Any]) -> EditEvent | None:
         meta = raw["meta"]
