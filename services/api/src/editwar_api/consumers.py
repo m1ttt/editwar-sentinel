@@ -25,10 +25,10 @@ from opentelemetry import trace
 from editwar_api.geo import GeoPoint, GeoService
 from editwar_api.metrics import ApiMetrics
 from editwar_api.repositories import AlertRepository
-from editwar_api.stats import StatsService, page_url
+from editwar_api.stats import StatsService
 from editwar_api.websocket import WebSocketHub
 from editwar_domain import TOPIC_ALERTS, TOPIC_EDITS, TOPIC_REVERTS, Alert, EditEvent, RevertEvent
-from editwar_domain.events import history_url
+from editwar_domain.events import history_url, page_url
 
 logger = logging.getLogger("editwar.api")
 tracer = trace.get_tracer("editwar.api")

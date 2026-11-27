@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from editwar_domain import EditEvent, RevertEvent
-from editwar_domain.events import history_url
+from editwar_domain.events import history_url, page_url
 
 if TYPE_CHECKING:
     from editwar_api.repositories import AlertRepository
@@ -26,10 +26,6 @@ logger = logging.getLogger("editwar.api")
 
 THROUGHPUT_WINDOW_SECONDS = 60
 DISPUTED_WINDOW_SECONDS = 3600
-
-
-def page_url(server_url: str, title: str) -> str:
-    return f"{server_url}/wiki/{title.replace(' ', '_')}"
 
 
 class StatsService:

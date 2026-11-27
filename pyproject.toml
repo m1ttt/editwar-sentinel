@@ -1,6 +1,6 @@
 [project]
 name = "editwar-sentinel"
-version = "1.3.0"
+version = "1.3.1"
 description = "Real-time detection of edit wars on Wikipedia."
 requires-python = ">=3.12"
 
