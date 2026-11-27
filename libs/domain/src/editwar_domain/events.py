@@ -43,7 +43,7 @@ class EditEvent:
 
     def partition_key(self) -> str:
         """Kafka key. All edits of one article go to the same partition."""
-        return f"{self.wiki}:{self.title}"
+        return self.title
 
     def page_url(self) -> str:
         return f"{self.server_url}/wiki/{self.title.replace(' ', '_')}"
