@@ -13,10 +13,19 @@ def _parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value).astimezone(UTC)
 
 
+def _page_name(title: str) -> str:
+    """Article title as it appears in a Wikipedia URL: underscores, percent-encoded."""
+    return quote(title.replace(" ", "_"), safe=":/(),")
+
+
+def page_url(server_url: str, title: str) -> str:
+    """URL of an article ("/wiki/<title>")."""
+    return f"{server_url}/wiki/{_page_name(title)}"
+
+
 def history_url(server_url: str, title: str) -> str:
     """URL of the revision history of an article ("action=history")."""
-    page = quote(title.replace(" ", "_"), safe=":/(),")
-    return f"{server_url}/w/index.php?title={page}&action=history"
+    return f"{server_url}/w/index.php?title={_page_name(title)}&action=history"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +55,7 @@ class EditEvent:
         return f"{self.wiki}:{self.title}"
 
     def page_url(self) -> str:
-        return f"{self.server_url}/wiki/{self.title.replace(' ', '_')}"
+        return page_url(self.server_url, self.title)
 
     def diff_url(self) -> str:
         return f"{self.server_url}/w/index.php?diff={self.rev_id}&oldid={self.old_rev_id}"

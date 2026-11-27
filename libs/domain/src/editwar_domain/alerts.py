@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from editwar_domain.events import history_url
+from editwar_domain.events import history_url, page_url
 
 # Keys that to_dict() computes from other fields; from_dict() ignores them.
 _DERIVED_KEYS = frozenset({"page_url", "history_url"})
@@ -53,7 +53,7 @@ class Alert:
     def page_url(self) -> str:
         if self.title == "*":
             return f"{self.server_url}/wiki/Special:RecentChanges"
-        return f"{self.server_url}/wiki/{self.title.replace(' ', '_')}"
+        return page_url(self.server_url, self.title)
 
     def history_url(self) -> str | None:
         """Revision history of the article, or None for wiki-wide alerts."""
