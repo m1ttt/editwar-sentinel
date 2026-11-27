@@ -60,6 +60,12 @@ def test_history_url_quotes_the_title() -> None:
     )
 
 
+def test_page_url_quotes_the_title() -> None:
+    # "?" and "#" would otherwise start the query string or the fragment.
+    event = make_event(title="Who? #1 & Café", server_url="https://es.wikipedia.org")
+    assert event.page_url() == "https://es.wikipedia.org/wiki/Who%3F_%231_%26_Caf%C3%A9"
+
+
 def test_revert_event_round_trip() -> None:
     revert = RevertEvent(
         event_id="e2",
